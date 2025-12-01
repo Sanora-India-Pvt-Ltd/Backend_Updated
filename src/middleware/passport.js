@@ -3,9 +3,16 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const Student = require('../models/Student');
 const Doctor = require('../models/Doctor');
 
+console.log('=== Loading Passport Configuration ===');
+console.log('GOOGLE_CLIENT_ID:', process.env.GOOGLE_CLIENT_ID ? 'Set' : 'Not Set');
+console.log('GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? 'Set' : 'Not Set');
+console.log('GOOGLE_CALLBACK_URL:', process.env.GOOGLE_CALLBACK_URL || 'Using default');
+
 // Only configure Google Strategy if required environment variables are present
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    passport.use(new GoogleStrategy({
+    console.log('Configuring Google OAuth strategy...');
+    
+    passport.use('google', new GoogleStrategy({
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
         callbackURL: process.env.GOOGLE_CALLBACK_URL || 
@@ -63,13 +70,17 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                 }
             }
             
+            console.log(`Google OAuth successful for ${email} (${userType})`);
             return done(null, user);
         } catch (error) {
+            console.error('Google OAuth error:', error);
             return done(error, null);
         }
     }));
+    
+    console.log('✅ Google OAuth strategy configured successfully');
 } else {
-    console.warn('Google OAuth is not configured. Missing required environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET');
+    console.warn('⚠️ Google OAuth is not configured. Missing required environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET');
 }
 
 // Serialize/deserialize user

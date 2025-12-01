@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const passport = require('passport');
-require('./middleware/passport');
+// require('./middleware/passport');
 
 // Connect to MongoDB
 connectDB();
