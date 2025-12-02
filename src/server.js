@@ -216,9 +216,33 @@ if (client && validClientIds.length > 0) {
     });
 }
 
-// Auth routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/auth', require('./routes/googleAuthRoutes'));
+// Auth routes - wrapped in try-catch to ensure server starts even if routes fail to load
+try {
+    console.log('🔄 Loading auth routes...');
+    app.use('/api/auth', require('./routes/authRoutes'));
+    console.log('✅ Auth routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading auth routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/auth', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Auth routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+try {
+    console.log('🔄 Loading Google auth routes...');
+    app.use('/api/auth', require('./routes/googleAuthRoutes'));
+    console.log('✅ Google auth routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading Google auth routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - routes will just not be available
+}
 
 // Debug route to list all registered routes
 app.get('/api/debug/routes', (req, res) => {
@@ -288,9 +312,39 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3100;
 
+// Log all registered routes before starting server
+console.log('\n📋 Verifying route registration...');
+const registeredRoutes = [];
+app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+        const methods = Object.keys(middleware.route.methods).map(m => m.toUpperCase()).join(', ');
+        registeredRoutes.push(`${methods} ${middleware.route.path}`);
+    } else if (middleware.name === 'router' || middleware.name === 'bound dispatch') {
+        const routerPath = middleware.regexp.source
+            .replace('\\/?', '')
+            .replace('(?=\\/|$)', '')
+            .replace(/\\\//g, '/')
+            .replace(/\^/g, '')
+            .replace(/\$/g, '')
+            .replace(/\\/g, '');
+        if (middleware.handle && middleware.handle.stack) {
+            middleware.handle.stack.forEach((handler) => {
+                if (handler.route) {
+                    const methods = Object.keys(handler.route.methods).map(m => m.toUpperCase()).join(', ');
+                    registeredRoutes.push(`${methods} ${routerPath}${handler.route.path}`);
+                }
+            });
+        }
+    }
+});
+console.log(`✅ Found ${registeredRoutes.length} registered routes`);
+if (registeredRoutes.length > 0) {
+    console.log('📝 Sample routes:', registeredRoutes.slice(0, 5).join(', '));
+}
+
 app.listen(PORT, () => {
-    console.log(`🎯 Server running on port ${PORT}`);
-    console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
+    console.log(`\n🎯 Server running on port ${PORT}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📊 Database: sanora`);
     console.log(`🔐 Auth routes: http://localhost:${PORT}/api/auth`);
     console.log('Environment Variables Check:');

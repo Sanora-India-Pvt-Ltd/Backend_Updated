@@ -245,4 +245,21 @@ class EmailService {
     }
 }
 
-module.exports = new EmailService();
+// Export emailService with error handling to prevent module loading crashes
+let emailServiceInstance;
+try {
+    emailServiceInstance = new EmailService();
+} catch (error) {
+    console.error('❌ Failed to initialize EmailService:', error.message);
+    // Create a dummy service that returns false for all operations
+    emailServiceInstance = {
+        transporter: null,
+        usingOAuth: false,
+        sendOTPEmail: async () => {
+            console.warn('⚠️  Email service not available');
+            return false;
+        }
+    };
+}
+
+module.exports = emailServiceInstance;
