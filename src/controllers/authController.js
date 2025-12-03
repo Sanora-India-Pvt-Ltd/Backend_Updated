@@ -5,13 +5,38 @@ const { generateToken } = require('../middleware/auth');
 // User Signup (with OTP verification)
 const signup = async (req, res) => {
     try {
-        const { email, password, name, verificationToken, otp } = req.body;
+        const { email, password, confirmPassword, firstName, lastName, phoneNumber, gender, name, verificationToken, otp } = req.body;
 
         // Validate input
-        if (!email || !password) {
+        if (!email || !password || !firstName || !lastName || !phoneNumber || !gender) {
             return res.status(400).json({
                 success: false,
-                message: 'Email and password are required'
+                message: 'Email, password, first name, last name, phone number, and gender are required'
+            });
+        }
+
+        // Validate password length (minimum 6 characters)
+        if (password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 6 characters long'
+            });
+        }
+
+        // Validate password confirmation
+        if (confirmPassword && password !== confirmPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password and confirm password do not match'
+            });
+        }
+
+        // Validate gender
+        const validGenders = ['Male', 'Female', 'Other'];
+        if (!validGenders.includes(gender)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Gender must be one of: Male, Female, Other'
             });
         }
 
@@ -49,7 +74,7 @@ const signup = async (req, res) => {
             const jwt = require('jsonwebtoken');
             let decoded;
             try {
-                decoded = jwt.verify(verificationToken, process.env.JWT_SECRET || 'your-secret-key');
+                decoded = jwt.verify(verificationToken, process.env.JWT_SECRET);
             } catch (error) {
                 return res.status(401).json({
                     success: false,
@@ -81,7 +106,11 @@ const signup = async (req, res) => {
         const user = await User.create({
             email,
             password: hashedPassword,
-            name: name || ''
+            firstName,
+            lastName,
+            phoneNumber,
+            gender,
+            name: name || `${firstName} ${lastName}`.trim()
         });
 
         // Generate JWT token
@@ -95,6 +124,10 @@ const signup = async (req, res) => {
                 user: {
                     id: user._id,
                     email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    phoneNumber: user.phoneNumber,
+                    gender: user.gender,
                     name: user.name
                 }
             }
@@ -151,6 +184,10 @@ const login = async (req, res) => {
                 user: {
                     id: user._id,
                     email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    phoneNumber: user.phoneNumber,
+                    gender: user.gender,
                     name: user.name,
                     profileImage: user.profileImage
                 }

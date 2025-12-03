@@ -166,7 +166,7 @@ const verifyOTPForSignup = async (req, res) => {
             });
         }
         
-        // Create verification token (short-lived, 10 minutes)
+        // Create verification token (short-lived, 20 minutes - allows time to fill form)
         const verificationToken = jwt.sign(
             { 
                 email, 
@@ -174,7 +174,7 @@ const verifyOTPForSignup = async (req, res) => {
                 forSignup: true
             },
             process.env.JWT_SECRET,
-            { expiresIn: '10m' }
+            { expiresIn: '20m' }
         );
         
         res.status(200).json({

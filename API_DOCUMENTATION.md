@@ -11,14 +11,26 @@ Base URL: `http://localhost:3100` (Local) or `https://your-production-url.com` (
 **Method:** `POST`  
 **URL:** `http://localhost:3100/api/auth/signup`
 
-**⚠️ IMPORTANT:** OTP verification is **MANDATORY** for signup. You must verify your email first using the OTP endpoints below.
+**⚠️ IMPORTANT:** OTP verification is **MANDATORY** for signup. 
+
+**Signup Flow:**
+1. User enters email and clicks "Send" → OTP is sent to email
+2. User verifies email with OTP code → Gets verification token
+3. User fills personal information (First Name, Last Name, Phone Number, Gender, Password)
+4. User submits complete signup form with all fields + verification token
+
+The verification token proves the email was already verified and allows the user time to fill the form.
 
 **Request Body (Option 1 - With Verification Token - Recommended):**
 ```json
 {
   "email": "user@example.com",
   "password": "yourPassword123",
-  "name": "John Doe",
+  "confirmPassword": "yourPassword123",
+  "firstName": "John",
+  "lastName": "Doe",
+  "phoneNumber": "+1234567890",
+  "gender": "Male",
   "verificationToken": "token_from_verify_otp_signup_endpoint"
 }
 ```
@@ -28,10 +40,25 @@ Base URL: `http://localhost:3100` (Local) or `https://your-production-url.com` (
 {
   "email": "user@example.com",
   "password": "yourPassword123",
-  "name": "John Doe",
+  "confirmPassword": "yourPassword123",
+  "firstName": "John",
+  "lastName": "Doe",
+  "phoneNumber": "+1234567890",
+  "gender": "Male",
   "otp": "123456"
 }
 ```
+
+**Required Fields:**
+- `email` (string): User's email address (must match the email used for OTP verification)
+- `password` (string): User's password (minimum 6 characters)
+- `confirmPassword` (string, optional): Password confirmation (must match password if provided)
+- `firstName` (string): User's first name
+- `lastName` (string): User's last name
+- `phoneNumber` (string): User's phone number
+- `gender` (string): User's gender - must be one of: "Male", "Female", "Other"
+- `verificationToken` (string, optional): Token from OTP verification endpoint (recommended, valid for 20 minutes)
+- `otp` (string, optional): OTP code directly (alternative to verificationToken)
 
 **Response (Success - 201):**
 ```json
@@ -43,13 +70,49 @@ Base URL: `http://localhost:3100` (Local) or `https://your-production-url.com` (
     "user": {
       "id": "user_id",
       "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "+1234567890",
+      "gender": "Male",
       "name": "John Doe"
     }
   }
 }
 ```
 
-**Response (Error - 400):**
+**Response (Error - 400 - Missing fields):**
+```json
+{
+  "success": false,
+  "message": "Email, password, first name, last name, phone number, and gender are required"
+}
+```
+
+**Response (Error - 400 - Invalid gender):**
+```json
+{
+  "success": false,
+  "message": "Gender must be one of: Male, Female, Other"
+}
+```
+
+**Response (Error - 400 - Password too short):**
+```json
+{
+  "success": false,
+  "message": "Password must be at least 6 characters long"
+}
+```
+
+**Response (Error - 400 - Password mismatch):**
+```json
+{
+  "success": false,
+  "message": "Password and confirm password do not match"
+}
+```
+
+**Response (Error - 400 - Missing OTP):**
 ```json
 {
   "success": false,
@@ -90,6 +153,10 @@ Base URL: `http://localhost:3100` (Local) or `https://your-production-url.com` (
     "user": {
       "id": "user_id",
       "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "+1234567890",
+      "gender": "Male",
       "name": "John Doe",
       "profileImage": "https://..."
     }
@@ -152,9 +219,10 @@ Base URL: `http://localhost:3100` (Local) or `https://your-production-url.com` (
 **Note:** 
 - Rate limited: 3 requests per 15 minutes per email
 - Works for new users (doesn't require account to exist)
-- **Required before signup**
+- **Required before signup** - This is the first step in the signup flow
 - OTP expires in 5 minutes (default)
 - Email addresses are automatically normalized to lowercase
+- After verification, you'll receive a verification token valid for 20 minutes to complete the signup form
 
 ---
 
@@ -219,7 +287,7 @@ Base URL: `http://localhost:3100` (Local) or `https://your-production-url.com` (
 **Note:** 
 - Rate limited: 5 attempts per 15 minutes per email
 - Use the `verificationToken` in the signup endpoint
-- Token expires in 10 minutes
+- Token expires in 20 minutes (allows time to fill the signup form)
 - Maximum 5 attempts per OTP
 - Email addresses are automatically normalized to lowercase
 
@@ -438,6 +506,10 @@ https://your-frontend.com/auth/callback?token=JWT_TOKEN&name=User%20Name&email=u
     "user": {
       "id": "user_id",
       "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "",
+      "gender": "Other",
       "name": "John Doe",
       "profileImage": "https://..."
     }
@@ -456,12 +528,21 @@ https://your-frontend.com/auth/callback?token=JWT_TOKEN&name=User%20Name&email=u
     "user": {
       "id": "user_id",
       "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "phoneNumber": "+1234567890",
+      "gender": "Male",
       "name": "John Doe",
       "profileImage": "https://..."
     }
   }
 }
 ```
+
+**Note:** 
+- For new Google OAuth users, `firstName` and `lastName` are extracted from Google's display name
+- `phoneNumber` defaults to empty string (user can update later)
+- `gender` defaults to "Other" (user can update later)
 
 **Response (Error - 400):**
 ```json
@@ -599,35 +680,47 @@ All endpoints return errors in this format:
 
 ## 🔄 Authentication Flow Examples
 
-### Standard Signup Flow (OTP Required):
+### Standard Signup Flow (Email-First OTP Verification):
 
-1. **Send OTP:**
+**Step 1: Email Verification (OTP)**
+1. **Send OTP to Email:**
    ```bash
    POST /api/auth/send-otp-signup
    Body: { "email": "user@example.com" }
    ```
-   → OTP sent to email
+   → OTP sent to email address
 
 2. **Verify OTP:**
    ```bash
    POST /api/auth/verify-otp-signup
    Body: { "email": "user@example.com", "otp": "123456" }
    ```
-   → Returns `verificationToken`
+   → Returns `verificationToken` (valid for 20 minutes)
 
-3. **Complete Signup:**
+**Step 2: Complete Signup Form**
+3. **Fill and Submit Signup Form:**
    ```bash
    POST /api/auth/signup
    Body: {
      "email": "user@example.com",
      "password": "yourPassword123",
-     "name": "John Doe",
+     "confirmPassword": "yourPassword123",
+     "firstName": "John",
+     "lastName": "Doe",
+     "phoneNumber": "+1234567890",
+     "gender": "Male",
      "verificationToken": "token_from_step_2"
    }
    ```
-   → Returns JWT token
+   → Returns JWT token and user data
 
 4. **Use token in `Authorization: Bearer <token>` header for protected routes**
+
+**Important Notes:**
+- Email verification (Step 1) must be completed before submitting the signup form
+- The verification token is valid for 20 minutes to allow time to fill the form
+- Password must be at least 6 characters long
+- Password and confirmPassword must match (if confirmPassword is provided)
 
 ---
 
@@ -712,8 +805,9 @@ All endpoints return errors in this format:
 
 - **Token Security:**
   - JWT tokens expire in 7 days
-  - Verification tokens expire in 10 minutes
+  - Verification tokens expire in 20 minutes (allows time to fill signup form)
   - Passwords are hashed using bcrypt
+  - Password minimum length: 6 characters
 
 - **Email Normalization:**
   - All email addresses are automatically normalized to lowercase
@@ -744,7 +838,11 @@ curl -X POST http://localhost:3100/api/auth/signup \
   -d '{
     "email":"test@example.com",
     "password":"MyPassword123",
-    "name":"Test User",
+    "confirmPassword":"MyPassword123",
+    "firstName":"Test",
+    "lastName":"User",
+    "phoneNumber":"+1234567890",
+    "gender":"Male",
     "verificationToken":"PASTE_TOKEN_HERE"
   }'
 ```

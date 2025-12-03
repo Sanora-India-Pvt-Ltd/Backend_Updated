@@ -2,3 +2,8 @@
 node_modules/
 .env
 *.log
+CURL_COMMANDS.md
+POSTMAN_QUICK_REFERENCE.md
+OTP_SETUP_GUIDE.md
+API_DOCUMENTATION.md
+test-otp-flow.sh

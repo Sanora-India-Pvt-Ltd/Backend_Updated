@@ -30,9 +30,18 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             let user = await User.findOne({ email });
             
             if (!user) {
+                // Extract firstName and lastName from displayName
+                const nameParts = displayName ? displayName.trim().split(/\s+/) : ['User'];
+                const firstName = nameParts[0] || 'User';
+                const lastName = nameParts.slice(1).join(' ') || 'User';
+                
                 // Create new user with Google OAuth
                 user = await User.create({
                     email,
+                    firstName,
+                    lastName,
+                    phoneNumber: '', // Google doesn't provide phone number, user can update later
+                    gender: 'Other', // Default gender since Google doesn't provide this
                     name: displayName,
                     googleId: id,
                     profileImage: photo,
@@ -41,6 +50,12 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
                 });
             } else if (!user.googleId) {
                 // Link Google account to existing user
+                // Update name if not already set
+                if (!user.firstName || !user.lastName) {
+                    const nameParts = displayName ? displayName.trim().split(/\s+/) : ['User'];
+                    user.firstName = user.firstName || nameParts[0] || 'User';
+                    user.lastName = user.lastName || nameParts.slice(1).join(' ') || 'User';
+                }
                 user.googleId = id;
                 user.profileImage = photo;
                 user.isGoogleOAuth = true;

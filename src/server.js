@@ -146,10 +146,20 @@ if (client && validClientIds.length > 0) {
             let isNewUser = false;
             
             if (!user) {
+                // Extract firstName and lastName from name
+                const displayName = name || email.split('@')[0] || 'User';
+                const nameParts = displayName.trim().split(/\s+/);
+                const firstName = nameParts[0] || 'User';
+                const lastName = nameParts.slice(1).join(' ') || 'User';
+                
                 // New user signup - no OTP needed (Google already verified email)
                 user = await User.create({
                     email: email.toLowerCase(),
-                    name: name || email.split('@')[0] || 'User',
+                    firstName,
+                    lastName,
+                    phoneNumber: '', // Google doesn't provide phone number, user can update later
+                    gender: 'Other', // Default gender since Google doesn't provide this
+                    name: displayName,
                     googleId,
                     profileImage: picture || '',
                     password: 'google-oauth',
@@ -158,6 +168,13 @@ if (client && validClientIds.length > 0) {
                 isNewUser = true;
             } else if (!user.googleId) {
                 // Existing user linking Google account
+                // Update name fields if not already set
+                if (!user.firstName || !user.lastName) {
+                    const displayName = name || email.split('@')[0] || 'User';
+                    const nameParts = displayName.trim().split(/\s+/);
+                    user.firstName = user.firstName || nameParts[0] || 'User';
+                    user.lastName = user.lastName || nameParts.slice(1).join(' ') || 'User';
+                }
                 user.googleId = googleId;
                 if (picture) user.profileImage = picture;
                 if (name) user.name = name;
@@ -186,6 +203,10 @@ if (client && validClientIds.length > 0) {
                     user: {
                         id: user._id,
                         email: user.email,
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        phoneNumber: user.phoneNumber,
+                        gender: user.gender,
                         name: user.name,
                         profileImage: user.profileImage
                     }
