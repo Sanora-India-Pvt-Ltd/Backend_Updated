@@ -657,8 +657,10 @@ const getProfile = async (req, res) => {
                     firstName: user.firstName,
                     lastName: user.lastName,
                     phoneNumber: user.phoneNumber,
+                    alternatePhoneNumber: user.alternatePhoneNumber,
                     gender: user.gender,
                     name: user.name,
+                    dob: user.dob,
                     profileImage: user.profileImage,
                     isGoogleOAuth: user.isGoogleOAuth,
                     googleId: user.googleId,
@@ -742,6 +744,130 @@ const logout = async (req, res) => {
     }
 };
 
+// Update User Profile
+const updateProfile = async (req, res) => {
+    try {
+        const user = req.user; // From protect middleware
+        const { firstName, lastName, phoneNumber, gender, dob, alternatePhoneNumber, profileImage, age } = req.body;
+
+        // List of allowed fields to update
+        const allowedUpdates = {};
+        
+        if (firstName !== undefined) allowedUpdates.firstName = firstName;
+        if (lastName !== undefined) allowedUpdates.lastName = lastName;
+        if (phoneNumber !== undefined) {
+            // Normalize phone number
+            let normalizedPhone = phoneNumber.replace(/[\s\-\(\)]/g, '');
+            if (!normalizedPhone.startsWith('+')) {
+                normalizedPhone = '+' + normalizedPhone;
+            }
+            
+            // Check if phone number is already taken by another user
+            const existingPhoneUser = await User.findOne({ 
+                phoneNumber: normalizedPhone,
+                _id: { $ne: user._id } // Exclude current user
+            });
+            
+            if (existingPhoneUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Phone number is already registered to another account'
+                });
+            }
+            
+            allowedUpdates.phoneNumber = normalizedPhone;
+        }
+        if (gender !== undefined) {
+            // Validate gender
+            const validGenders = ['Male', 'Female', 'Other', 'Prefer not to say'];
+            if (!validGenders.includes(gender)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Gender must be one of: Male, Female, Other, Prefer not to say'
+                });
+            }
+            allowedUpdates.gender = gender;
+        }
+        if (dob !== undefined) {
+            allowedUpdates.dob = dob;
+        }
+        if (alternatePhoneNumber !== undefined) {
+            // Normalize alternate phone number
+            let normalizedAltPhone = alternatePhoneNumber.replace(/[\s\-\(\)]/g, '');
+            if (!normalizedAltPhone.startsWith('+')) {
+                normalizedAltPhone = '+' + normalizedAltPhone;
+            }
+            allowedUpdates.alternatePhoneNumber = normalizedAltPhone;
+        }
+        if (profileImage !== undefined) {
+            allowedUpdates.profileImage = profileImage;
+        }
+        
+        // Handle age field - convert to dob if provided
+        if (age !== undefined) {
+            if (typeof age !== 'number' || age < 0 || age > 150) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Age must be a valid number between 0 and 150'
+                });
+            }
+            // Calculate date of birth from age
+            const today = new Date();
+            const birthYear = today.getFullYear() - age;
+            allowedUpdates.dob = new Date(birthYear, today.getMonth(), today.getDate());
+        }
+
+        // Update name field if firstName or lastName changed
+        if (allowedUpdates.firstName || allowedUpdates.lastName) {
+            const updatedFirstName = allowedUpdates.firstName || user.firstName;
+            const updatedLastName = allowedUpdates.lastName || user.lastName;
+            allowedUpdates.name = `${updatedFirstName} ${updatedLastName}`.trim();
+        }
+
+        // Check if there are any updates
+        if (Object.keys(allowedUpdates).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid fields to update'
+            });
+        }
+
+        // Update user
+        Object.assign(user, allowedUpdates);
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: {
+                user: {
+                    id: user._id,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    phoneNumber: user.phoneNumber,
+                    alternatePhoneNumber: user.alternatePhoneNumber,
+                    gender: user.gender,
+                    name: user.name,
+                    dob: user.dob,
+                    profileImage: user.profileImage,
+                    isGoogleOAuth: user.isGoogleOAuth,
+                    googleId: user.googleId,
+                    createdAt: user.createdAt,
+                    updatedAt: user.updatedAt
+                }
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error updating profile',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     signup,
     login,
@@ -749,6 +875,7 @@ module.exports = {
     verifyOTPForPasswordReset,
     resetPassword,
     getProfile,
+    updateProfile,
     refreshToken,
     logout
 };

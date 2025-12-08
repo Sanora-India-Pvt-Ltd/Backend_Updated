@@ -293,6 +293,24 @@ try {
     // Don't crash - routes will just not be available
 }
 
+// User routes - for updating user profile
+try {
+    console.log('🔄 Loading user routes...');
+    app.use('/api/user', require('./routes/userRoutes'));
+    console.log('✅ User routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading user routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/user', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'User routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');
@@ -606,7 +624,7 @@ app.get('/', (req, res) => {
         success: true,
         message: '🚀 Sanora Backend API is running!',
         timestamp: new Date().toISOString(),
-        endpoints: {
+            endpoints: {
             signup: 'POST /api/auth/signup',
             login: 'POST /api/auth/login',
             getProfile: 'GET /api/auth/profile (protected)',
@@ -622,7 +640,13 @@ app.get('/', (req, res) => {
             verifyOTPPhone: 'POST /verify-otp (Twilio phone OTP)',
             forgotPasswordSendOTP: 'POST /api/auth/forgot-password/send-otp',
             forgotPasswordVerifyOTP: 'POST /api/auth/forgot-password/verify-otp',
-            forgotPasswordReset: 'POST /api/auth/forgot-password/reset'
+            forgotPasswordReset: 'POST /api/auth/forgot-password/reset',
+            updateProfile: 'PUT /api/user/profile (protected)',
+            updatePhoneSendOTP: 'POST /api/user/phone/send-otp (protected)',
+            updatePhoneVerifyOTP: 'POST /api/user/phone/verify-otp (protected)',
+            updateAlternatePhoneSendOTP: 'POST /api/user/alternate-phone/send-otp (protected)',
+            updateAlternatePhoneVerifyOTP: 'POST /api/user/alternate-phone/verify-otp (protected)',
+            removeAlternatePhone: 'DELETE /api/user/alternate-phone (protected)'
         }
     });
 });

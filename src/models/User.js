@@ -33,6 +33,15 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    dob: {
+        type: Date,
+        required: false
+    },
+    alternatePhoneNumber: {
+        type: String,
+        required: false,
+        default: undefined
+    },
     googleId: {
         type: String,
         unique: true,

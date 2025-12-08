@@ -13,18 +13,23 @@
    - [Refresh Token](#3-refresh-access-token)
    - [Logout](#4-logout)
    - [Get User Profile](#5-get-current-user-profile)
-3. [OTP Verification](#-otp-verification)
+3. [User Profile Management](#-user-profile-management)
+   - [Update Profile](#17-update-user-profile)
+   - [Update Phone Number](#18-update-phone-number)
+   - [Update Alternate Phone Number](#19-update-alternate-phone-number)
+   - [Remove Alternate Phone Number](#20-remove-alternate-phone-number)
+4. [OTP Verification](#-otp-verification)
    - [Signup OTP (Email)](#6-send-otp-for-signup-email)
    - [Signup OTP (Phone)](#7-send-phone-otp-for-signup)
    - [Forgot Password OTP](#8-send-otp-for-password-reset)
-4. [Google OAuth](#-google-oauth)
+5. [Google OAuth](#-google-oauth)
    - [Web OAuth](#9-google-oauth-web-redirect-flow)
    - [Token Verification](#10-verify-google-token)
    - [Check Email](#11-check-email-exists)
-5. [Authentication Flows](#-authentication-flows)
-6. [Error Handling](#-error-handling)
-7. [Security Features](#-security-features)
-8. [Testing Examples](#-testing-examples)
+6. [Authentication Flows](#-authentication-flows)
+7. [Error Handling](#-error-handling)
+8. [Security Features](#-security-features)
+9. [Testing Examples](#-testing-examples)
 
 ---
 
@@ -268,8 +273,10 @@ Authorization: Bearer your_access_token_here
       "firstName": "John",
       "lastName": "Doe",
       "phoneNumber": "+1234567890",
+      "alternatePhoneNumber": "+1987654321",
       "gender": "Male",
       "name": "John Doe",
+      "dob": "1999-01-15T00:00:00.000Z",
       "profileImage": "https://...",
       "isGoogleOAuth": false,
       "googleId": null,
@@ -283,6 +290,319 @@ Authorization: Bearer your_access_token_here
 **Error Responses:**
 - `401`: No token, invalid token, expired token
 - `404`: User not found
+
+---
+
+## 👤 User Profile Management
+
+All user profile management endpoints require authentication. Include the access token in the `Authorization` header.
+
+### 17. Update User Profile
+
+**Method:** `PUT`  
+**URL:** `/api/user/profile`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Request Body:**
+```json
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "name": "John Doe",
+  "dob": "1999-01-15",
+  "gender": "Male"
+}
+```
+
+**Fields:**
+- `firstName` (string, optional): User's first name
+- `lastName` (string, optional): User's last name
+- `name` (string, optional): Full name (auto-updated if firstName/lastName changed)
+- `dob` (string, optional): Date of birth in ISO 8601 format (YYYY-MM-DD). Must be a valid date, not in the future, and not more than 150 years ago
+- `gender` (string, optional): One of: "Male", "Female", "Other", "Prefer not to say"
+
+**Note:** You can update any combination of these fields. Only provided fields will be updated.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Profile updated successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "dob": "1999-01-15T00:00:00.000Z",
+      "phoneNumber": "+1234567890",
+      "alternatePhoneNumber": "+1987654321",
+      "gender": "Male",
+      "profileImage": "https://...",
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:30:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid date of birth (must be valid date, not in future, not more than 150 years ago), invalid gender, empty name fields
+- `401`: No token, invalid token, expired token
+
+---
+
+### 18. Update Phone Number
+
+**⚠️ IMPORTANT:** Phone number updates require OTP verification via Twilio.
+
+#### Step 1: Send OTP for Phone Update
+
+**Method:** `POST`  
+**URL:** `/api/user/phone/send-otp`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Request Body:**
+```json
+{
+  "phoneNumber": "+1234567890"
+}
+```
+
+**Required Fields:**
+- `phoneNumber` (string): New phone number in E.164 format (e.g., +1234567890)
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "OTP sent successfully to your phone",
+  "data": {
+    "phone": "+1234567890",
+    "sid": "VEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "status": "pending"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Phone already registered by another user, same as current phone
+- `401`: No token, invalid token, expired token
+- `429`: Rate limited (3 requests per 15 minutes)
+- `500`: Twilio not configured
+
+#### Step 2: Verify OTP and Update Phone
+
+**Method:** `POST`  
+**URL:** `/api/user/phone/verify-otp`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Request Body:**
+```json
+{
+  "phoneNumber": "+1234567890",
+  "otp": "123456"
+}
+```
+
+**Required Fields:**
+- `phoneNumber` (string): Phone number (must match the one used in step 1)
+- `otp` (string): OTP code received via SMS
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Phone number updated successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "dob": "1999-01-15T00:00:00.000Z",
+      "phoneNumber": "+1234567890",
+      "alternatePhoneNumber": "+1987654321",
+      "gender": "Male",
+      "profileImage": "https://...",
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:35:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid OTP, phone already registered by another user
+- `401`: No token, invalid token, expired token
+- `429`: Rate limited (5 attempts per 15 minutes)
+- `500`: Twilio not configured
+
+**Note:** 
+- Phone number must be in E.164 format
+- OTP expires in 10 minutes (Twilio default)
+- Phone number must not be already registered by another user
+
+---
+
+### 19. Update Alternate Phone Number
+
+**⚠️ IMPORTANT:** Alternate phone number updates require OTP verification via Twilio.
+
+#### Step 1: Send OTP for Alternate Phone
+
+**Method:** `POST`  
+**URL:** `/api/user/alternate-phone/send-otp`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Request Body:**
+```json
+{
+  "alternatePhoneNumber": "+1987654321"
+}
+```
+
+**Required Fields:**
+- `alternatePhoneNumber` (string): Alternate phone number in E.164 format (e.g., +1987654321)
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "OTP sent successfully to your alternate phone",
+  "data": {
+    "alternatePhone": "+1987654321",
+    "sid": "VEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "status": "pending"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Phone already registered by another user, same as primary phone, same as current alternate phone
+- `401`: No token, invalid token, expired token
+- `429`: Rate limited (3 requests per 15 minutes)
+- `500`: Twilio not configured
+
+#### Step 2: Verify OTP and Update Alternate Phone
+
+**Method:** `POST`  
+**URL:** `/api/user/alternate-phone/verify-otp`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Request Body:**
+```json
+{
+  "alternatePhoneNumber": "+1987654321",
+  "otp": "123456"
+}
+```
+
+**Required Fields:**
+- `alternatePhoneNumber` (string): Alternate phone number (must match the one used in step 1)
+- `otp` (string): OTP code received via SMS
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Alternate phone number updated successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "dob": "1999-01-15T00:00:00.000Z",
+      "phoneNumber": "+1234567890",
+      "alternatePhoneNumber": "+1987654321",
+      "gender": "Male",
+      "profileImage": "https://...",
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:40:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid OTP, phone already registered by another user, same as primary phone
+- `401`: No token, invalid token, expired token
+- `429`: Rate limited (5 attempts per 15 minutes)
+- `500`: Twilio not configured
+
+**Note:** 
+- Alternate phone number must be different from primary phone number
+- Phone number must be in E.164 format
+- OTP expires in 10 minutes (Twilio default)
+
+---
+
+### 20. Remove Alternate Phone Number
+
+**Method:** `DELETE`  
+**URL:** `/api/user/alternate-phone`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Alternate phone number removed successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "email": "user@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "dob": "1999-01-15T00:00:00.000Z",
+      "phoneNumber": "+1234567890",
+      "alternatePhoneNumber": null,
+      "gender": "Male",
+      "profileImage": "https://...",
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:45:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `401`: No token, invalid token, expired token
 
 ---
 
@@ -991,6 +1311,63 @@ curl -X GET https://api.sanoraindia.com/api/auth/profile \
   -H "Authorization: Bearer NEW_ACCESS_TOKEN"
 ```
 
+### Update User Profile
+
+```bash
+# Update profile (name, dob, gender)
+curl -X PUT https://api.sanoraindia.com/api/user/profile \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "John",
+    "lastName": "Doe",
+    "dob": "1999-01-15",
+    "gender": "Male"
+  }'
+```
+
+### Update Phone Number
+
+```bash
+# 1. Send OTP for phone update
+curl -X POST https://api.sanoraindia.com/api/user/phone/send-otp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"phoneNumber": "+1234567890"}'
+
+# 2. Verify OTP and update phone
+curl -X POST https://api.sanoraindia.com/api/user/phone/verify-otp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "+1234567890",
+    "otp": "123456"
+  }'
+```
+
+### Update Alternate Phone Number
+
+```bash
+# 1. Send OTP for alternate phone
+curl -X POST https://api.sanoraindia.com/api/user/alternate-phone/send-otp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"alternatePhoneNumber": "+1987654321"}'
+
+# 2. Verify OTP and update alternate phone
+curl -X POST https://api.sanoraindia.com/api/user/alternate-phone/verify-otp \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alternatePhoneNumber": "+1987654321",
+    "otp": "123456"
+  }'
+
+# 3. Remove alternate phone (optional)
+curl -X DELETE https://api.sanoraindia.com/api/user/alternate-phone \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
 ### Refresh Token
 
 ```bash
@@ -1069,6 +1446,64 @@ curl -X POST https://api.sanoraindia.com/api/auth/verify-google-token \
 - See `OTP_SETUP_GUIDE.md` for email service configuration
 - For Twilio phone OTP, configure `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_VERIFY_SERVICE_SID`
 - For Google OAuth, configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_ANDROID_CLIENT_ID`, and `GOOGLE_IOS_CLIENT_ID`
+
+---
+
+---
+
+## 📝 User Profile Management Flow
+
+### Update Profile Information
+
+1. **Update Basic Info (No Verification Required):**
+   ```bash
+   PUT /api/user/profile
+   Body: { "firstName": "John", "dob": "1999-01-15", "gender": "Male" }
+   ```
+   → Updates name, date of birth, gender immediately
+
+### Update Phone Number Flow
+
+1. **Send OTP:**
+   ```bash
+   POST /api/user/phone/send-otp
+   Body: { "phoneNumber": "+1234567890" }
+   ```
+   → OTP sent to new phone number
+
+2. **Verify OTP and Update:**
+   ```bash
+   POST /api/user/phone/verify-otp
+   Body: { "phoneNumber": "+1234567890", "otp": "123456" }
+   ```
+   → Phone number updated
+
+### Update Alternate Phone Number Flow
+
+1. **Send OTP:**
+   ```bash
+   POST /api/user/alternate-phone/send-otp
+   Body: { "alternatePhoneNumber": "+1987654321" }
+   ```
+   → OTP sent to alternate phone number
+
+2. **Verify OTP and Update:**
+   ```bash
+   POST /api/user/alternate-phone/verify-otp
+   Body: { "alternatePhoneNumber": "+1987654321", "otp": "123456" }
+   ```
+   → Alternate phone number added/updated
+
+3. **Remove Alternate Phone (Optional):**
+   ```bash
+   DELETE /api/user/alternate-phone
+   ```
+   → Alternate phone number removed
+
+**Note:** 
+- Phone number updates require OTP verification via Twilio
+- Profile updates (name, age, gender) do not require verification
+- All endpoints require authentication
 
 ---
 

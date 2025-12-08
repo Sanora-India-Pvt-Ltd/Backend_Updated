@@ -1,5 +1,5 @@
 const express = require('express');
-const { signup, login, sendOTPForPasswordReset, verifyOTPForPasswordReset, resetPassword, getProfile, refreshToken, logout } = require('../controllers/authController');
+const { signup, login, sendOTPForPasswordReset, verifyOTPForPasswordReset, resetPassword, getProfile, updateProfile, refreshToken, logout } = require('../controllers/authController');
 const { sendOTPForSignup, verifyOTPForSignup, sendPhoneOTPForSignup, verifyPhoneOTPForSignup } = require('../middleware/authController');
 const { limitOTPRequests, limitVerifyRequests } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth');
@@ -24,6 +24,9 @@ router.post('/forgot-password/reset', resetPassword);
 // Get current user profile (protected route)
 router.get('/profile', protect, getProfile);
 
+// Update current user profile (protected route)
+router.put('/profile', protect, updateProfile);
+
 // Refresh access token
 router.post('/refresh-token', refreshToken);
 
@@ -42,6 +45,7 @@ console.log('  POST /api/auth/forgot-password/send-otp');
 console.log('  POST /api/auth/forgot-password/verify-otp');
 console.log('  POST /api/auth/forgot-password/reset');
 console.log('  GET  /api/auth/profile (protected)');
+console.log('  PUT  /api/auth/profile (protected)');
 console.log('  POST /api/auth/refresh-token');
 console.log('  POST /api/auth/logout (protected)');
 
