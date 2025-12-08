@@ -609,6 +609,9 @@ app.get('/', (req, res) => {
         endpoints: {
             signup: 'POST /api/auth/signup',
             login: 'POST /api/auth/login',
+            getProfile: 'GET /api/auth/profile (protected)',
+            refreshToken: 'POST /api/auth/refresh-token',
+            logout: 'POST /api/auth/logout (protected)',
             googleAuth: 'GET /api/auth/google',
             verifyGoogleToken: 'POST /api/auth/verify-google-token',
             sendOTPSignup: 'POST /api/auth/send-otp-signup',
@@ -629,12 +632,29 @@ app.use((req, res) => {
     console.log(`❌ Route not found: ${req.method} ${req.path}`);
     console.log(`   Headers:`, req.headers);
     console.log(`   Body:`, req.body);
+    
+    // Provide helpful hints based on the path
+    let hint = 'Make sure you are using the correct HTTP method and path.';
+    if (req.path === '/api/auth/profile') {
+        hint = 'GET /api/auth/profile requires Authorization header: Authorization: Bearer <accessToken>. Make sure you are authenticated.';
+    } else if (req.path.startsWith('/api/auth/')) {
+        hint = 'Check the API documentation for the correct HTTP method and endpoint. Common endpoints: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/profile (requires auth)';
+    }
+    
     res.status(404).json({
         success: false,
         message: 'Route not found',
         method: req.method,
         path: req.path,
-        hint: 'Make sure you are using the correct HTTP method (POST for /api/auth/send-otp-signup) and Content-Type: application/json header'
+        hint: hint,
+        availableEndpoints: req.path.startsWith('/api/auth/') ? {
+            signup: 'POST /api/auth/signup',
+            login: 'POST /api/auth/login',
+            getProfile: 'GET /api/auth/profile (requires Authorization: Bearer <token>)',
+            refreshToken: 'POST /api/auth/refresh-token',
+            sendOTPSignup: 'POST /api/auth/send-otp-signup',
+            verifyOTPSignup: 'POST /api/auth/verify-otp-signup'
+        } : undefined
     });
 });
 

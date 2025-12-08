@@ -29,13 +29,42 @@ const sendOTPForSignup = async (req, res) => {
         // Create OTP record for signup
         const { otpRecord, plainOTP } = await createOTPRecord(email, 'signup');
         
+        // Check if email service is configured
+        if (!emailService.transporter) {
+            return res.status(503).json({
+                success: false,
+                message: 'Email service is not configured',
+                hint: 'Please configure EMAIL_USER and EMAIL_PASSWORD in your .env file. For Gmail, use an App Password (not your regular password). See OTP_SETUP_GUIDE.md for instructions.'
+            });
+        }
+        
         // Send email
         const emailSent = await emailService.sendOTPEmail(email, plainOTP);
         
         if (!emailSent) {
-            return res.status(500).json({
+            // Provide helpful error message based on common issues
+            const errorMessage = 'Failed to send OTP email';
+            const hints = [];
+            
+            // Check if it's likely an authentication issue
+            if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+                hints.push('Email credentials (EMAIL_USER, EMAIL_PASSWORD) are not configured in .env');
+            } else {
+                hints.push('Check server logs for detailed error information');
+                hints.push('For Gmail: Ensure you are using an App Password (not your regular password)');
+                hints.push('Verify 2-Step Verification is enabled on your Google account');
+                hints.push('Double-check EMAIL_USER matches your Gmail address exactly');
+            }
+            
+            return res.status(503).json({
                 success: false,
-                message: 'Failed to send OTP email'
+                message: errorMessage,
+                hint: hints.join('. '),
+                troubleshooting: process.env.NODE_ENV === 'development' ? {
+                    emailConfigured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASSWORD),
+                    emailHost: process.env.EMAIL_HOST || 'smtp.gmail.com',
+                    emailPort: process.env.EMAIL_PORT || '587'
+                } : undefined
             });
         }
         

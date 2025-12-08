@@ -213,17 +213,55 @@ class EmailService {
             return true;
         } catch (error) {
             console.error('📧 ❌ Error sending email:', error.message);
-            console.error('📧 Full error:', error);
-            console.error('📧 Error details:', {
-                code: error.code,
-                command: error.command,
-                response: error.response,
-                responseCode: error.responseCode,
-                stack: error.stack
-            });
             
-            // Try to reinitialize transporter on error
-            if (error.code === 'EAUTH' || error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+            // Provide helpful guidance for Gmail authentication errors
+            if (error.code === 'EAUTH' && error.response && error.response.includes('BadCredentials')) {
+                console.error('\n🔐 GMAIL AUTHENTICATION ERROR DETECTED');
+                console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.error('❌ Gmail rejected your credentials. Common causes:');
+                console.error('');
+                console.error('1. ❌ Using regular Gmail password instead of App Password');
+                console.error('   → Gmail requires an App Password for SMTP access');
+                console.error('');
+                console.error('2. ❌ 2-Step Verification not enabled');
+                console.error('   → App Passwords require 2-Step Verification');
+                console.error('');
+                console.error('3. ❌ Incorrect email address or App Password');
+                console.error('   → Double-check EMAIL_USER and EMAIL_PASSWORD in .env');
+                console.error('');
+                console.error('📋 QUICK FIX STEPS:');
+                console.error('   1. Enable 2-Step Verification: https://myaccount.google.com/security');
+                console.error('   2. Generate App Password: https://myaccount.google.com/apppasswords');
+                console.error('   3. Select "Mail" and "Other (Custom name)" → Name it "Sanora OTP"');
+                console.error('   4. Copy the 16-character password (remove spaces)');
+                console.error('   5. Update .env: EMAIL_PASSWORD=your-app-password-without-spaces');
+                console.error('   6. Restart your server');
+                console.error('');
+                console.error('📖 Full guide: See OTP_SETUP_GUIDE.md');
+                console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            } else if (error.code === 'EAUTH') {
+                console.error('\n🔐 AUTHENTICATION ERROR');
+                console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+                console.error('❌ Email authentication failed. Please check:');
+                console.error('   • EMAIL_USER in .env matches your email address');
+                console.error('   • EMAIL_PASSWORD is correct (use App Password for Gmail)');
+                console.error('   • For Gmail: Use App Password, not regular password');
+                console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+            }
+            
+            // Only log full error details in development
+            if (process.env.NODE_ENV === 'development') {
+                console.error('📧 Full error:', error);
+                console.error('📧 Error details:', {
+                    code: error.code,
+                    command: error.command,
+                    response: error.response,
+                    responseCode: error.responseCode
+                });
+            }
+            
+            // Try to reinitialize transporter on error (but skip retry for EAUTH to avoid spam)
+            if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
                 console.log('📧 Attempting to reinitialize email transporter...');
                 this.transporter = null; // Reset transporter
                 await this.initializeTransporter();
@@ -238,6 +276,9 @@ class EmailService {
                         console.error('📧 Retry error code:', retryError.code);
                     }
                 }
+            } else if (error.code === 'EAUTH') {
+                // Don't retry authentication errors - they won't succeed without fixing credentials
+                console.error('📧 ⚠️  Skipping retry - authentication errors require credential fixes');
             }
             
             return false;

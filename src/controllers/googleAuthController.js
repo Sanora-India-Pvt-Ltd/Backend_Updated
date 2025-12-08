@@ -88,8 +88,37 @@ const googleCallback = (req, res, next) => {
             console.log(`✅ Google OAuth successful for ${user.email}`);
             console.log(`📱 Mobile request: ${isMobile ? 'Yes' : 'No'}`);
             
+            // Check if JSON response is requested (for API clients)
+            const wantsJson = req.query.format === 'json' || 
+                            req.headers.accept?.includes('application/json') ||
+                            req.query.json === 'true';
+            
             // For mobile apps, return JSON response or redirect to deep link
             if (isMobile) {
+                // If JSON is requested, return JSON response with both tokens
+                if (wantsJson) {
+                    return res.status(200).json({
+                        success: true,
+                        message: isNewUser ? 'Signup successful via Google OAuth' : 'Login successful via Google OAuth',
+                        data: {
+                            accessToken,
+                            refreshToken,
+                            token, // For backward compatibility
+                            isNewUser,
+                            user: {
+                                id: user._id,
+                                email: user.email,
+                                firstName: user.firstName,
+                                lastName: user.lastName,
+                                phoneNumber: user.phoneNumber,
+                                gender: user.gender,
+                                name: user.name,
+                                profileImage: user.profileImage
+                            }
+                        }
+                    });
+                }
+                
                 // Check if deep link scheme is provided
                 const deepLinkScheme = req.query.deepLink || 
                                      req.session?.deepLink || 
@@ -102,8 +131,8 @@ const googleCallback = (req, res, next) => {
                     delete req.session.deepLink;
                 }
                 
-                // Create deep link URL
-                const deepLinkUrl = `${deepLinkScheme}://auth/callback?token=${token}&email=${encodeURIComponent(user.email)}&name=${encodeURIComponent(user.name || '')}&isNewUser=${isNewUser}`;
+                // Create deep link URL (include all tokens for consistency)
+                const deepLinkUrl = `${deepLinkScheme}://auth/callback?token=${token}&accessToken=${accessToken}&refreshToken=${refreshToken}&email=${encodeURIComponent(user.email)}&name=${encodeURIComponent(user.name || '')}&isNewUser=${isNewUser}`;
                 
                 // Return HTML page that automatically opens deep link
                 const html = `<!DOCTYPE html>
@@ -232,7 +261,10 @@ const googleCallback = (req, res, next) => {
         // Redirect to frontend with token and user info
         try {
             const redirectUrl = new URL(`${frontendUrl}/auth/callback`);
+            // Include all tokens for consistency across all authentication flows
             redirectUrl.searchParams.append('token', token);
+            redirectUrl.searchParams.append('accessToken', accessToken);
+            redirectUrl.searchParams.append('refreshToken', refreshToken);
             redirectUrl.searchParams.append('name', encodeURIComponent(user.name || ''));
             redirectUrl.searchParams.append('email', user.email);
             redirectUrl.searchParams.append('isNewUser', isNewUser);
@@ -245,12 +277,19 @@ const googleCallback = (req, res, next) => {
                 success: true,
                 message: 'Google OAuth successful',
                 data: {
-                    token,
+                    accessToken,
+                    refreshToken,
+                    token, // For backward compatibility
                     isNewUser,
                     user: {
                         id: user._id,
                         email: user.email,
-                        name: user.name
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        phoneNumber: user.phoneNumber,
+                        gender: user.gender,
+                        name: user.name,
+                        profileImage: user.profileImage
                     }
                 },
                 redirectUrl: `${frontendUrl}/auth/callback?token=${token}&email=${encodeURIComponent(user.email)}`,

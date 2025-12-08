@@ -164,6 +164,7 @@ const signup = async (req, res) => {
             data: {
                 accessToken,
                 refreshToken,
+                token: accessToken, // For backward compatibility
                 user: {
                     id: user._id,
                     email: user.email,
@@ -236,6 +237,7 @@ const login = async (req, res) => {
             data: {
                 accessToken,
                 refreshToken,
+                token: accessToken, // For backward compatibility
                 user: {
                     id: user._id,
                     email: user.email,
@@ -340,6 +342,15 @@ const sendOTPForPasswordReset = async (req, res) => {
             const { createOTPRecord } = require('../../services/otpService');
             const emailService = require('../../services/emailService');
             
+            // Check if email service is configured
+            if (!emailService.transporter) {
+                return res.status(503).json({
+                    success: false,
+                    message: 'Email service is not configured',
+                    hint: 'Please configure EMAIL_USER and EMAIL_PASSWORD in your .env file. For Gmail, use an App Password (not your regular password).'
+                });
+            }
+            
             // Create OTP record (using 'password_reset' as userType)
             const { otpRecord, plainOTP } = await createOTPRecord(email.toLowerCase(), 'password_reset');
             
@@ -347,9 +358,10 @@ const sendOTPForPasswordReset = async (req, res) => {
             const emailSent = await emailService.sendOTPEmail(email.toLowerCase(), plainOTP);
             
             if (!emailSent) {
-                return res.status(500).json({
+                return res.status(503).json({
                     success: false,
-                    message: 'Failed to send OTP email'
+                    message: 'Failed to send OTP email',
+                    hint: 'Check server logs for details. For Gmail: Ensure you are using an App Password and 2-Step Verification is enabled.'
                 });
             }
 
