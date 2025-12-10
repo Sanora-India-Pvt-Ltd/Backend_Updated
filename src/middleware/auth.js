@@ -2,20 +2,22 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const crypto = require('crypto');
 
-// Generate Access Token (short-lived - 15 minutes)
+// Generate Access Token (short-lived - 1 hour for better UX, still secure)
 const generateAccessToken = (payload) => {
     return jwt.sign(
         payload,
         process.env.JWT_SECRET || 'your-secret-key',
-        { expiresIn: '15m' } // Short-lived access token
+        { expiresIn: '1h' } // 1 hour - balances security and user experience
     );
 };
 
-// Generate Refresh Token (long-lived - 90 days)
+// Generate Refresh Token (never expires - only invalidated on explicit logout)
 const generateRefreshToken = () => {
     const token = crypto.randomBytes(40).toString('hex'); // Secure random token
+    // Set expiry to 100 years from now (effectively never expires)
+    // Tokens are only invalidated when user explicitly logs out
     const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + 90); // 90 days from now
+    expiryDate.setFullYear(expiryDate.getFullYear() + 100); // 100 years from now (effectively never expires)
     return { token, expiryDate };
 };
 
@@ -75,8 +77,13 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        // Find user by refresh token
-        const user = await User.findOne({ refreshToken });
+        // Find user by refresh token (check both old single token and new array)
+        let user = await User.findOne({ refreshToken });
+        
+        // If not found in single token field, check refreshTokens array
+        if (!user) {
+            user = await User.findOne({ 'refreshTokens.token': refreshToken });
+        }
 
         if (!user) {
             return res.status(401).json({
@@ -85,16 +92,23 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        // Check if refresh token has expired
-        if (user.refreshTokenExpiry && new Date() > user.refreshTokenExpiry) {
-            // Clear expired token
-            user.refreshToken = null;
-            user.refreshTokenExpiry = null;
-            await user.save();
-            
+        // Check if token exists in refreshTokens array
+        let tokenRecord = null;
+        if (user.refreshTokens && Array.isArray(user.refreshTokens)) {
+            tokenRecord = user.refreshTokens.find(rt => rt.token === refreshToken);
+        }
+
+        // Fallback to single token field for backward compatibility
+        if (!tokenRecord && user.refreshToken === refreshToken) {
+            // Token found in single field - it's valid (no expiry check)
+            // Tokens only expire when user explicitly logs out
+        } else if (tokenRecord) {
+            // Token found in array - it's valid (no expiry check)
+            // Tokens only expire when user explicitly logs out
+        } else {
             return res.status(401).json({
                 success: false,
-                message: 'Refresh token has expired. Please login again.'
+                message: 'Invalid refresh token'
             });
         }
 

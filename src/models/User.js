@@ -62,7 +62,25 @@ const userSchema = new mongoose.Schema({
     refreshTokenExpiry: {
         type: Date,
         default: null
-    }
+    },
+    refreshTokens: [{
+        token: {
+            type: String,
+            required: true
+        },
+        expiryDate: {
+            type: Date,
+            required: true
+        },
+        deviceInfo: {
+            type: String,
+            default: 'Unknown Device'
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }]
 }, {
     timestamps: true
 });

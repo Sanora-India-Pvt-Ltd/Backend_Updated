@@ -154,9 +154,30 @@ const signup = async (req, res) => {
         const accessToken = generateAccessToken({ id: user._id, email: user.email });
         const { token: refreshToken, expiryDate: refreshTokenExpiry } = generateRefreshToken();
 
-        // Save refresh token and expiry to database
+        // Get device info from request (optional)
+        const deviceInfo = req.headers['user-agent'] || req.body.deviceInfo || 'Unknown Device';
+
+        // Initialize refreshTokens array if it doesn't exist
+        if (!user.refreshTokens) {
+            user.refreshTokens = [];
+        }
+
+        // Add new refresh token to array (allows multiple devices)
+        user.refreshTokens.push({
+            token: refreshToken,
+            expiryDate: refreshTokenExpiry,
+            deviceInfo: deviceInfo.substring(0, 200), // Limit length
+            createdAt: new Date()
+        });
+
+        // Note: We no longer clean up tokens automatically
+        // Tokens only expire when user explicitly logs out
+        // This allows users to stay logged in indefinitely
+
+        // Keep backward compatibility - set single token fields
         user.refreshToken = refreshToken;
         user.refreshTokenExpiry = refreshTokenExpiry;
+
         await user.save();
 
         res.status(201).json({
@@ -228,9 +249,30 @@ const login = async (req, res) => {
         const accessToken = generateAccessToken({ id: user._id, email: user.email });
         const { token: refreshToken, expiryDate: refreshTokenExpiry } = generateRefreshToken();
 
-        // Save refresh token and expiry to database
+        // Get device info from request (optional)
+        const deviceInfo = req.headers['user-agent'] || req.body.deviceInfo || 'Unknown Device';
+
+        // Initialize refreshTokens array if it doesn't exist
+        if (!user.refreshTokens) {
+            user.refreshTokens = [];
+        }
+
+        // Add new refresh token to array (allows multiple devices)
+        user.refreshTokens.push({
+            token: refreshToken,
+            expiryDate: refreshTokenExpiry,
+            deviceInfo: deviceInfo.substring(0, 200), // Limit length
+            createdAt: new Date()
+        });
+
+        // Note: We no longer clean up tokens automatically
+        // Tokens only expire when user explicitly logs out
+        // This allows users to stay logged in indefinitely
+
+        // Keep backward compatibility - set single token fields
         user.refreshToken = refreshToken;
         user.refreshTokenExpiry = refreshTokenExpiry;
+
         await user.save();
 
         res.status(200).json({
@@ -693,8 +735,13 @@ const refreshToken = async (req, res) => {
             });
         }
 
-        // Find user by refresh token
-        const user = await User.findOne({ refreshToken });
+        // Find user by refresh token (check both old single token and new array)
+        let user = await User.findOne({ refreshToken });
+        
+        // If not found in single token field, check refreshTokens array
+        if (!user) {
+            user = await User.findOne({ 'refreshTokens.token': refreshToken });
+        }
 
         if (!user) {
             return res.status(401).json({
@@ -703,16 +750,24 @@ const refreshToken = async (req, res) => {
             });
         }
 
-        // Check if refresh token has expired
-        if (user.refreshTokenExpiry && new Date() > user.refreshTokenExpiry) {
-            // Clear expired token
-            user.refreshToken = null;
-            user.refreshTokenExpiry = null;
-            await user.save();
-            
+        // Check if token exists in refreshTokens array
+        let tokenRecord = null;
+        if (user.refreshTokens && Array.isArray(user.refreshTokens)) {
+            tokenRecord = user.refreshTokens.find(rt => rt.token === refreshToken);
+        }
+
+        // Fallback to single token field for backward compatibility
+        if (!tokenRecord && user.refreshToken === refreshToken) {
+            // Token found in single field - check if it's still valid
+            // Note: We no longer check expiry date - tokens only expire on explicit logout
+            // The expiryDate check is removed to allow indefinite login
+        } else if (tokenRecord) {
+            // Token found in array - it's valid (no expiry check)
+            // Tokens only expire when user explicitly logs out
+        } else {
             return res.status(401).json({
                 success: false,
-                message: 'Refresh token has expired. Please login again.'
+                message: 'Invalid refresh token'
             });
         }
 
@@ -740,16 +795,88 @@ const refreshToken = async (req, res) => {
 const logout = async (req, res) => {
     try {
         const user = req.user; // From protect middleware
+        const { refreshToken, deviceId } = req.body; // Optional: specific token or device ID to logout
 
-        // Clear refresh token and expiry from database
-        user.refreshToken = null;
-        user.refreshTokenExpiry = null;
+        let loggedOutDevice = null;
+        let remainingDevices = 0;
+
+        if (refreshToken || deviceId) {
+            // Remove specific refresh token from array
+            if (user.refreshTokens && Array.isArray(user.refreshTokens)) {
+                const beforeCount = user.refreshTokens.length;
+                
+                // Find device info before removing
+                if (refreshToken) {
+                    const deviceToLogout = user.refreshTokens.find(rt => rt.token === refreshToken);
+                    if (deviceToLogout) {
+                        loggedOutDevice = parseDeviceInfo(deviceToLogout.deviceInfo);
+                    }
+                } else if (deviceId) {
+                    // deviceId is 1-based index from getDevices response
+                    const deviceIndex = parseInt(deviceId) - 1;
+                    if (deviceIndex >= 0 && deviceIndex < user.refreshTokens.length) {
+                        // Sort tokens by createdAt to match getDevices order
+                        const sortedTokens = [...user.refreshTokens].sort((a, b) => 
+                            new Date(b.createdAt) - new Date(a.createdAt)
+                        );
+                        const deviceToLogout = sortedTokens[deviceIndex];
+                        if (deviceToLogout) {
+                            loggedOutDevice = parseDeviceInfo(deviceToLogout.deviceInfo);
+                            // Remove the actual token from array
+                            user.refreshTokens = user.refreshTokens.filter(
+                                rt => rt.token !== deviceToLogout.token
+                            );
+                        }
+                    }
+                } else {
+                    // Remove by refreshToken
+                    user.refreshTokens = user.refreshTokens.filter(
+                        rt => rt.token !== refreshToken
+                    );
+                }
+                
+                remainingDevices = user.refreshTokens.length;
+            }
+            
+            // Also clear single token if it matches
+            if (user.refreshToken === refreshToken) {
+                if (!loggedOutDevice) {
+                    loggedOutDevice = {
+                        deviceName: 'Legacy Device',
+                        deviceType: 'Unknown',
+                        browser: 'Unknown',
+                        os: 'Unknown'
+                    };
+                }
+                user.refreshToken = null;
+                user.refreshTokenExpiry = null;
+            }
+        } else {
+            // If no specific token provided, clear all tokens (logout from all devices)
+            const totalDevices = (user.refreshTokens?.length || 0) + (user.refreshToken ? 1 : 0);
+            user.refreshToken = null;
+            user.refreshTokenExpiry = null;
+            user.refreshTokens = [];
+            remainingDevices = 0;
+        }
+
         await user.save();
 
-        res.status(200).json({
+        const response = {
             success: true,
-            message: 'Logged out successfully'
-        });
+            message: refreshToken || deviceId 
+                ? 'Logged out successfully from this device' 
+                : 'Logged out successfully from all devices',
+            data: {
+                remainingDevices
+            }
+        };
+
+        if (loggedOutDevice) {
+            response.data.loggedOutDevice = loggedOutDevice;
+        }
+
+        res.status(200).json(response);
 
     } catch (error) {
         res.status(500).json({
@@ -884,6 +1011,149 @@ const updateProfile = async (req, res) => {
     }
 };
 
+// Helper function to parse user agent and extract device info
+const parseDeviceInfo = (userAgent) => {
+    if (!userAgent || userAgent === 'Unknown Device') {
+        return {
+            deviceName: 'Unknown Device',
+            deviceType: 'Unknown',
+            browser: 'Unknown',
+            os: 'Unknown',
+            raw: userAgent || 'Unknown Device'
+        };
+    }
+
+    const ua = userAgent.toLowerCase();
+    
+    // Detect device type
+    let deviceType = 'Desktop';
+    if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
+        deviceType = 'Mobile';
+    } else if (ua.includes('tablet') || ua.includes('ipad')) {
+        deviceType = 'Tablet';
+    }
+
+    // Detect browser
+    let browser = 'Unknown';
+    if (ua.includes('chrome') && !ua.includes('edg')) {
+        browser = 'Chrome';
+    } else if (ua.includes('firefox')) {
+        browser = 'Firefox';
+    } else if (ua.includes('safari') && !ua.includes('chrome')) {
+        browser = 'Safari';
+    } else if (ua.includes('edg')) {
+        browser = 'Edge';
+    } else if (ua.includes('opera') || ua.includes('opr')) {
+        browser = 'Opera';
+    }
+
+    // Detect OS
+    let os = 'Unknown';
+    if (ua.includes('windows')) {
+        os = 'Windows';
+    } else if (ua.includes('mac os') || ua.includes('macos')) {
+        os = 'macOS';
+    } else if (ua.includes('linux')) {
+        os = 'Linux';
+    } else if (ua.includes('android')) {
+        os = 'Android';
+    } else if (ua.includes('ios') || ua.includes('iphone') || ua.includes('ipad')) {
+        os = 'iOS';
+    }
+
+    // Create device name
+    let deviceName = `${os} - ${browser}`;
+    if (deviceType !== 'Desktop') {
+        deviceName = `${deviceType} (${os}) - ${browser}`;
+    }
+
+    return {
+        deviceName,
+        deviceType,
+        browser,
+        os,
+        raw: userAgent
+    };
+};
+
+// Get all logged-in devices for the current user
+const getDevices = async (req, res) => {
+    try {
+        const user = req.user; // From protect middleware
+        
+        // Get current refresh token from request (if available) to identify current device
+        let currentRefreshToken = null;
+        if (req.body.refreshToken) {
+            currentRefreshToken = req.body.refreshToken;
+        } else if (req.headers['x-refresh-token']) {
+            currentRefreshToken = req.headers['x-refresh-token'];
+        }
+
+        // Get all refresh tokens (devices)
+        const devices = [];
+        
+        // Check refreshTokens array
+        if (user.refreshTokens && Array.isArray(user.refreshTokens)) {
+            user.refreshTokens.forEach((tokenRecord) => {
+                const parsedInfo = parseDeviceInfo(tokenRecord.deviceInfo);
+                devices.push({
+                    deviceInfo: parsedInfo,
+                    loggedInAt: tokenRecord.createdAt || new Date(),
+                    isCurrentDevice: currentRefreshToken ? tokenRecord.token === currentRefreshToken : false,
+                    // Don't expose the actual token for security, but include a hash for identification
+                    tokenId: tokenRecord.token ? tokenRecord.token.substring(0, 16) : null
+                });
+            });
+        }
+        
+        // Also check single refreshToken field for backward compatibility
+        if (user.refreshToken) {
+            const tokenPreview = user.refreshToken.substring(0, 16);
+            const alreadyIncluded = devices.some(d => d.tokenId === tokenPreview);
+            
+            if (!alreadyIncluded) {
+                devices.push({
+                    deviceInfo: {
+                        deviceName: 'Legacy Device',
+                        deviceType: 'Unknown',
+                        browser: 'Unknown',
+                        os: 'Unknown',
+                        raw: 'Legacy Device'
+                    },
+                    loggedInAt: user.refreshTokenExpiry || new Date(),
+                    isCurrentDevice: currentRefreshToken ? user.refreshToken === currentRefreshToken : false,
+                    tokenId: tokenPreview
+                });
+            }
+        }
+
+        // Sort by most recent first
+        devices.sort((a, b) => new Date(b.loggedInAt) - new Date(a.loggedInAt));
+
+        // Add sequential IDs after sorting
+        const devicesWithIds = devices.map((device, index) => ({
+            id: index + 1,
+            ...device
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Devices retrieved successfully',
+            data: {
+                totalDevices: devicesWithIds.length,
+                devices: devicesWithIds
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching devices',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     signup,
     login,
@@ -893,6 +1163,7 @@ module.exports = {
     getProfile,
     updateProfile,
     refreshToken,
-    logout
+    logout,
+    getDevices
 };
 

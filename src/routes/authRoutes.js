@@ -1,5 +1,5 @@
 const express = require('express');
-const { signup, login, sendOTPForPasswordReset, verifyOTPForPasswordReset, resetPassword, getProfile, updateProfile, refreshToken, logout } = require('../controllers/authController');
+const { signup, login, sendOTPForPasswordReset, verifyOTPForPasswordReset, resetPassword, getProfile, updateProfile, refreshToken, logout, getDevices } = require('../controllers/authController');
 const { sendOTPForSignup, verifyOTPForSignup, sendPhoneOTPForSignup, verifyPhoneOTPForSignup } = require('../middleware/authController');
 const { limitOTPRequests, limitVerifyRequests } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth');
@@ -33,6 +33,9 @@ router.post('/refresh-token', refreshToken);
 // Logout (protected route - invalidates refresh token)
 router.post('/logout', protect, logout);
 
+// Get all logged-in devices (protected route)
+router.get('/devices', protect, getDevices);
+
 // Debug: Log all registered routes
 console.log('📋 Auth routes registered:');
 console.log('  POST /api/auth/signup');
@@ -48,5 +51,6 @@ console.log('  GET  /api/auth/profile (protected)');
 console.log('  PUT  /api/auth/profile (protected)');
 console.log('  POST /api/auth/refresh-token');
 console.log('  POST /api/auth/logout (protected)');
+console.log('  GET  /api/auth/devices (protected)');
 
 module.exports = router;

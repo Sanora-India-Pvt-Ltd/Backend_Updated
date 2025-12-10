@@ -116,8 +116,33 @@ const googleLoginMobile = async (req, res) => {
         });
 
         const { token: refreshToken, expiryDate } = generateRefreshToken();
+        
+        // Get device info from request (optional)
+        const deviceInfo = req.headers['user-agent'] || req.body.deviceInfo || 'Unknown Device';
+
+        // Initialize refreshTokens array if it doesn't exist
+        if (!user.refreshTokens) {
+            user.refreshTokens = [];
+        }
+
+        // Add new refresh token to array (allows multiple devices)
+        user.refreshTokens.push({
+            token: refreshToken,
+            expiryDate: expiryDate,
+            deviceInfo: deviceInfo.substring(0, 200), // Limit length
+            createdAt: new Date()
+        });
+
+        // Clean up expired tokens (older than 90 days)
+        const now = new Date();
+        user.refreshTokens = user.refreshTokens.filter(
+            rt => rt.expiryDate > now
+        );
+
+        // Keep backward compatibility - set single token fields
         user.refreshToken = refreshToken;
         user.refreshTokenExpiry = expiryDate;
+        
         await user.save();
 
         return res.status(200).json({
@@ -208,9 +233,30 @@ const googleCallback = (req, res, next) => {
             });
             const { token: refreshToken, expiryDate: refreshTokenExpiry } = generateRefreshToken();
             
-            // Save refresh token and expiry to database
+            // Get device info from request (optional)
+            const deviceInfo = req.headers['user-agent'] || req.body.deviceInfo || 'Unknown Device';
+
+            // Initialize refreshTokens array if it doesn't exist
+            if (!user.refreshTokens) {
+                user.refreshTokens = [];
+            }
+
+            // Add new refresh token to array (allows multiple devices)
+            user.refreshTokens.push({
+                token: refreshToken,
+                expiryDate: refreshTokenExpiry,
+                deviceInfo: deviceInfo.substring(0, 200), // Limit length
+                createdAt: new Date()
+            });
+
+            // Note: We no longer clean up tokens automatically
+            // Tokens only expire when user explicitly logs out
+            // This allows users to stay logged in indefinitely
+
+            // Keep backward compatibility - set single token fields
             user.refreshToken = refreshToken;
             user.refreshTokenExpiry = refreshTokenExpiry;
+            
             await user.save();
         
             // For backward compatibility, use accessToken as token

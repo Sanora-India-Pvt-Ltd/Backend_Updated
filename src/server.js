@@ -333,10 +333,10 @@ try {
     console.error('❌ Error loading media upload routes:', error.message);
     console.error('Stack:', error.stack);
     // Don't crash - create a fallback route
-    app.use('/api/user', (req, res) => {
+    app.use('/api/media', (req, res) => {
         res.status(500).json({
             success: false,
-            message: 'User routes failed to load. Check server logs.',
+            message: 'Media routes failed to load. Check server logs.',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
     });
