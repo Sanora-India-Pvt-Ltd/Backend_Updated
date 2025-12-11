@@ -37,7 +37,16 @@
    - [Create Post](#30-create-post)
    - [Get All Posts](#31-get-all-posts)
    - [Get User Posts](#32-get-user-posts)
-7. [OTP Verification](#-otp-verification)
+7. [Friend Management](#-friend-management)
+   - [Send Friend Request](#33-send-friend-request)
+   - [Accept Friend Request](#34-accept-friend-request)
+   - [Reject Friend Request](#35-reject-friend-request)
+   - [List Friends](#36-list-friends)
+   - [List Received Requests](#37-list-received-friend-requests)
+   - [List Sent Requests](#38-list-sent-friend-requests)
+   - [Unfriend User](#39-unfriend-user)
+   - [Cancel Sent Request](#40-cancel-sent-friend-request)
+8. [OTP Verification](#-otp-verification)
    - [Send OTP for Signup (Email)](#6-send-otp-for-signup-email)
    - [Verify OTP for Signup (Email)](#7-verify-otp-for-signup-email)
    - [Send Phone OTP for Signup](#8-send-phone-otp-for-signup)
@@ -45,16 +54,16 @@
    - [Send OTP for Password Reset](#10-send-otp-for-password-reset)
    - [Verify OTP for Password Reset](#11-verify-otp-for-password-reset)
    - [Reset Password](#12-reset-password)
-8. [Google OAuth](#-google-oauth)
+9. [Google OAuth](#-google-oauth)
    - [Web OAuth](#13-google-oauth-web-redirect-flow)
    - [OAuth Callback](#14-google-oauth-callback)
    - [Mobile OAuth](#15-google-oauth-mobile-androidios)
    - [Verify Google Token](#16-verify-google-token-androidiosweb)
    - [Check Email](#18-check-email-exists)
-9. [Authentication Flows](#-authentication-flows)
-10. [Error Handling](#-error-handling)
-11. [Security Features](#-security-features)
-12. [Testing Examples](#-testing-examples)
+10. [Authentication Flows](#-authentication-flows)
+11. [Error Handling](#-error-handling)
+12. [Security Features](#-security-features)
+13. [Testing Examples](#-testing-examples)
 
 ---
 
@@ -2549,6 +2558,436 @@ GET /api/posts/user/user_id_123?page=1&limit=10
 
 ---
 
+## 👥 Friend Management
+
+### 33. Send Friend Request
+
+**Method:** `POST`  
+**URL:** `/api/friend/send/:receiverId`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Send a friend request to another user. The system validates that users are not already friends and prevents duplicate requests.
+
+**URL Parameters:**
+- `receiverId` (string, required): User ID of the person you want to send a friend request to
+
+**Example Request:**
+```bash
+POST /api/friend/send/507f1f77bcf86cd799439011
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "Friend request sent successfully",
+  "data": {
+    "_id": "request_id",
+    "sender": {
+      "_id": "sender_id",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "profileImage": "https://..."
+    },
+    "receiver": {
+      "_id": "receiver_id",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "profileImage": "https://..."
+    },
+    "status": "pending",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:30:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid receiver ID, cannot send request to yourself, already friends, duplicate request exists
+- `404`: User not found
+- `500`: Failed to send friend request
+
+**Note:** 
+- You cannot send a friend request to yourself
+- System prevents duplicate pending requests in both directions
+- If the other user already sent you a request, you must accept/reject it first
+
+---
+
+### 34. Accept Friend Request
+
+**Method:** `POST`  
+**URL:** `/api/friend/accept/:requestId`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Accept a friend request that was sent to you. Both users are added to each other's friends list.
+
+**URL Parameters:**
+- `requestId` (string, required): Friend request ID
+
+**Example Request:**
+```bash
+POST /api/friend/accept/507f1f77bcf86cd799439011
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Friend request accepted successfully",
+  "data": {
+    "_id": "request_id",
+    "sender": {
+      "_id": "sender_id",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "profileImage": "https://..."
+    },
+    "receiver": {
+      "_id": "receiver_id",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "profileImage": "https://..."
+    },
+    "status": "accepted",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:35:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid request ID, request already processed
+- `403`: You can only accept requests sent to you
+- `404`: Friend request not found
+- `500`: Failed to accept friend request
+
+**Note:** 
+- Only the receiver can accept a friend request
+- Both users are automatically added to each other's friends list
+- Request status is updated to "accepted"
+
+---
+
+### 35. Reject Friend Request
+
+**Method:** `POST`  
+**URL:** `/api/friend/reject/:requestId`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Reject a friend request that was sent to you. The request status is updated to "rejected".
+
+**URL Parameters:**
+- `requestId` (string, required): Friend request ID
+
+**Example Request:**
+```bash
+POST /api/friend/reject/507f1f77bcf86cd799439011
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Friend request rejected successfully",
+  "data": {
+    "_id": "request_id",
+    "sender": {
+      "_id": "sender_id",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "profileImage": "https://..."
+    },
+    "receiver": {
+      "_id": "receiver_id",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "name": "Jane Smith",
+      "email": "jane@example.com",
+      "profileImage": "https://..."
+    },
+    "status": "rejected",
+    "createdAt": "2024-01-15T10:30:00.000Z",
+    "updatedAt": "2024-01-15T10:35:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid request ID, request already processed
+- `403`: You can only reject requests sent to you
+- `404`: Friend request not found
+- `500`: Failed to reject friend request
+
+**Note:** 
+- Only the receiver can reject a friend request
+- Request is kept in database with "rejected" status for audit purposes
+
+---
+
+### 36. List Friends
+
+**Method:** `GET`  
+**URL:** `/api/friend/list`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Get a list of all your confirmed friends with their profile information.
+
+**Example Request:**
+```bash
+GET /api/friend/list
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Friends retrieved successfully",
+  "data": {
+    "friends": [
+      {
+        "_id": "friend_id_1",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "name": "Jane Smith",
+        "email": "jane@example.com",
+        "profileImage": "https://...",
+        "bio": "Software developer",
+        "currentCity": "New York",
+        "hometown": "Boston"
+      },
+      {
+        "_id": "friend_id_2",
+        "firstName": "Bob",
+        "lastName": "Johnson",
+        "name": "Bob Johnson",
+        "email": "bob@example.com",
+        "profileImage": "https://...",
+        "bio": "",
+        "currentCity": "Los Angeles",
+        "hometown": ""
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+**Error Responses:**
+- `404`: User not found
+- `500`: Failed to retrieve friends
+
+**Note:** 
+- Returns all confirmed friends (users who have accepted your friend request)
+- Friend details are automatically populated
+
+---
+
+### 37. List Received Friend Requests
+
+**Method:** `GET`  
+**URL:** `/api/friend/requests/received`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Get a list of all pending friend requests that were sent to you (waiting for your response).
+
+**Example Request:**
+```bash
+GET /api/friend/requests/received
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Received friend requests retrieved successfully",
+  "data": {
+    "requests": [
+      {
+        "_id": "request_id",
+        "sender": {
+          "_id": "sender_id",
+          "firstName": "John",
+          "lastName": "Doe",
+          "name": "John Doe",
+          "email": "john@example.com",
+          "profileImage": "https://...",
+          "bio": "Photographer",
+          "currentCity": "San Francisco",
+          "hometown": "Seattle"
+        },
+        "receiver": "receiver_id",
+        "status": "pending",
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+**Error Responses:**
+- `500`: Failed to retrieve received friend requests
+
+**Note:** 
+- Only returns pending requests (not accepted or rejected)
+- Results are sorted by newest first
+- Use this for notification badges/counts
+
+---
+
+### 38. List Sent Friend Requests
+
+**Method:** `GET`  
+**URL:** `/api/friend/requests/sent`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Get a list of all pending friend requests that you sent (waiting for their response).
+
+**Example Request:**
+```bash
+GET /api/friend/requests/sent
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Sent friend requests retrieved successfully",
+  "data": {
+    "requests": [
+      {
+        "_id": "request_id",
+        "sender": "sender_id",
+        "receiver": {
+          "_id": "receiver_id",
+          "firstName": "Jane",
+          "lastName": "Smith",
+          "name": "Jane Smith",
+          "email": "jane@example.com",
+          "profileImage": "https://...",
+          "bio": "Software developer",
+          "currentCity": "New York",
+          "hometown": "Boston"
+        },
+        "status": "pending",
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+**Error Responses:**
+- `500`: Failed to retrieve sent friend requests
+
+**Note:** 
+- Only returns pending requests (not accepted or rejected)
+- Results are sorted by newest first
+- Use this to track requests you've sent
+
+---
+
+### 39. Unfriend User
+
+**Method:** `DELETE`  
+**URL:** `/api/friend/unfriend/:friendId`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Remove a user from your friends list. Both users are removed from each other's friends list.
+
+**URL Parameters:**
+- `friendId` (string, required): User ID of the friend to unfriend
+
+**Example Request:**
+```bash
+DELETE /api/friend/unfriend/507f1f77bcf86cd799439011
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "User unfriended successfully"
+}
+```
+
+**Error Responses:**
+- `400`: Invalid friend ID, cannot unfriend yourself, not friends with this user
+- `404`: User not found
+- `500`: Failed to unfriend user
+
+**Note:** 
+- Removes the friendship bidirectionally (both users' friends lists are updated)
+- Any accepted friend requests are updated to "rejected" status
+
+---
+
+### 40. Cancel Sent Friend Request
+
+**Method:** `DELETE`  
+**URL:** `/api/friend/cancel/:requestId`  
+**Authentication:** Required (Bearer Token)
+
+**Description:**  
+Cancel a pending friend request that you sent. The request is deleted from the database.
+
+**URL Parameters:**
+- `requestId` (string, required): Friend request ID
+
+**Example Request:**
+```bash
+DELETE /api/friend/cancel/507f1f77bcf86cd799439011
+Authorization: Bearer <your_access_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Friend request cancelled successfully"
+}
+```
+
+**Error Responses:**
+- `400`: Invalid request ID, request already processed
+- `403`: You can only cancel requests you sent
+- `404`: Friend request not found
+- `500`: Failed to cancel friend request
+
+**Note:** 
+- Only the sender can cancel their own pending requests
+- Request must be in "pending" status to be cancelled
+
+---
+
 ## 📧 OTP Verification
 
 ### 6. Send OTP for Signup (Email)
@@ -3569,6 +4008,62 @@ curl -X POST https://api.sanoraindia.com/api/auth/forgot-password/reset \
 curl -X POST https://api.sanoraindia.com/api/auth/verify-google-token \
   -H "Content-Type: application/json" \
   -d '{"token":"GOOGLE_ID_TOKEN"}'
+```
+
+### Friend Management
+
+```bash
+# 1. Send friend request
+curl -X POST https://api.sanoraindia.com/api/friend/send/RECEIVER_USER_ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 2. List received friend requests (requests sent to you)
+curl -X GET https://api.sanoraindia.com/api/friend/requests/received \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 3. Accept friend request
+curl -X POST https://api.sanoraindia.com/api/friend/accept/REQUEST_ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 4. Reject friend request (alternative to accept)
+curl -X POST https://api.sanoraindia.com/api/friend/reject/REQUEST_ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 5. List sent friend requests (requests you sent)
+curl -X GET https://api.sanoraindia.com/api/friend/requests/sent \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 6. Cancel sent friend request
+curl -X DELETE https://api.sanoraindia.com/api/friend/cancel/REQUEST_ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 7. List all friends
+curl -X GET https://api.sanoraindia.com/api/friend/list \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# 8. Unfriend a user
+curl -X DELETE https://api.sanoraindia.com/api/friend/unfriend/FRIEND_USER_ID \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Complete Friend Request Flow:**
+
+```bash
+# User A sends friend request to User B
+curl -X POST https://api.sanoraindia.com/api/friend/send/USER_B_ID \
+  -H "Authorization: Bearer USER_A_ACCESS_TOKEN"
+
+# User B checks received requests
+curl -X GET https://api.sanoraindia.com/api/friend/requests/received \
+  -H "Authorization: Bearer USER_B_ACCESS_TOKEN"
+
+# User B accepts the request
+curl -X POST https://api.sanoraindia.com/api/friend/accept/REQUEST_ID \
+  -H "Authorization: Bearer USER_B_ACCESS_TOKEN"
+
+# Both users can now see each other in friends list
+curl -X GET https://api.sanoraindia.com/api/friend/list \
+  -H "Authorization: Bearer USER_A_ACCESS_TOKEN"
 ```
 
 ---

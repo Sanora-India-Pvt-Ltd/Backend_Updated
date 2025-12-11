@@ -741,30 +741,52 @@ const verifyOTPAndUpdateAlternatePhone = async (req, res) => {
             });
         }
 
-        // Update alternate phone number
+        // Update alternate phone number using $set to ensure proper update
+        console.log(`📱 Updating alternate phone number for user ${user._id} to: ${normalizedPhone}`);
         const updatedUser = await User.findByIdAndUpdate(
             user._id,
-            { alternatePhoneNumber: normalizedPhone },
+            { $set: { alternatePhoneNumber: normalizedPhone } },
             { new: true, runValidators: true }
         ).select('-password -refreshToken');
+
+        // Verify the update was successful
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Double-check by querying the database directly to ensure the update persisted
+        const verifyUser = await User.findById(user._id).select('alternatePhoneNumber');
+        console.log(`✅ Alternate phone number updated. Response value: ${updatedUser.alternatePhoneNumber}, Database value: ${verifyUser?.alternatePhoneNumber}`);
+        
+        if (verifyUser?.alternatePhoneNumber !== normalizedPhone) {
+            console.error(`❌ WARNING: Alternate phone number update may not have persisted! Expected: ${normalizedPhone}, Got: ${verifyUser?.alternatePhoneNumber}`);
+            // Use the verified database value
+            updatedUser.alternatePhoneNumber = verifyUser.alternatePhoneNumber;
+        }
+
+        // Reload the full user document to ensure we have the latest data
+        const finalUser = await User.findById(user._id).select('-password -refreshToken');
 
         res.status(200).json({
             success: true,
             message: 'Alternate phone number updated successfully',
             data: {
                 user: {
-                    id: updatedUser._id,
-                    email: updatedUser.email,
-                    firstName: updatedUser.firstName,
-                    lastName: updatedUser.lastName,
-                    name: updatedUser.name,
-                    dob: updatedUser.dob,
-                    phoneNumber: updatedUser.phoneNumber,
-                    alternatePhoneNumber: updatedUser.alternatePhoneNumber,
-                    gender: updatedUser.gender,
-                    profileImage: updatedUser.profileImage,
-                    createdAt: updatedUser.createdAt,
-                    updatedAt: updatedUser.updatedAt
+                    id: finalUser._id,
+                    email: finalUser.email,
+                    firstName: finalUser.firstName,
+                    lastName: finalUser.lastName,
+                    name: finalUser.name,
+                    dob: finalUser.dob,
+                    phoneNumber: finalUser.phoneNumber,
+                    alternatePhoneNumber: finalUser.alternatePhoneNumber,
+                    gender: finalUser.gender,
+                    profileImage: finalUser.profileImage,
+                    createdAt: finalUser.createdAt,
+                    updatedAt: finalUser.updatedAt
                 }
             }
         });
@@ -790,10 +812,10 @@ const removeAlternatePhone = async (req, res) => {
     try {
         const user = req.user; // From protect middleware
 
-        // Remove alternate phone number
+        // Remove alternate phone number using $unset to properly remove the field
         const updatedUser = await User.findByIdAndUpdate(
             user._id,
-            { alternatePhoneNumber: undefined },
+            { $unset: { alternatePhoneNumber: '' } },
             { new: true, runValidators: true }
         ).select('-password -refreshToken');
 
@@ -1378,11 +1400,14 @@ const updatePersonalInfo = async (req, res) => {
             updateData.dob = dobDate;
         }
 
+        // Build unset object for fields that need to be cleared
+        const unsetData = {};
+
         // Handle phone number (if provided, just update - OTP verification should be done separately if needed)
         if (phoneNumber !== undefined) {
             if (phoneNumber === null || phoneNumber === '') {
-                // Allow clearing phone number
-                updateData.phoneNumber = undefined;
+                // Allow clearing phone number - use $unset to properly remove it
+                unsetData.phoneNumber = '';
             } else {
                 // Normalize phone number
                 let normalizedPhone = phoneNumber.replace(/[\s\-\(\)]/g, '');
@@ -1410,8 +1435,8 @@ const updatePersonalInfo = async (req, res) => {
         // Handle alternate phone number
         if (alternatePhoneNumber !== undefined) {
             if (alternatePhoneNumber === null || alternatePhoneNumber === '') {
-                // Allow clearing alternate phone number
-                updateData.alternatePhoneNumber = undefined;
+                // Allow clearing alternate phone number - use $unset to properly remove it
+                unsetData.alternatePhoneNumber = '';
             } else {
                 // Normalize phone number
                 let normalizedPhone = alternatePhoneNumber.replace(/[\s\-\(\)]/g, '');
@@ -1448,17 +1473,26 @@ const updatePersonalInfo = async (req, res) => {
         }
 
         // Check if there's anything to update
-        if (Object.keys(updateData).length === 0) {
+        if (Object.keys(updateData).length === 0 && Object.keys(unsetData).length === 0) {
             return res.status(400).json({
                 success: false,
                 message: 'No fields provided to update'
             });
         }
 
+        // Build the update query with both $set and $unset if needed
+        const updateQuery = {};
+        if (Object.keys(updateData).length > 0) {
+            updateQuery.$set = updateData;
+        }
+        if (Object.keys(unsetData).length > 0) {
+            updateQuery.$unset = unsetData;
+        }
+
         // Update user
         const updatedUser = await User.findByIdAndUpdate(
             user._id,
-            updateData,
+            updateQuery,
             { new: true, runValidators: true }
         ).select('-password -refreshToken');
 

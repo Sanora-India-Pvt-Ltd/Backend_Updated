@@ -399,6 +399,24 @@ try {
     });
 }
 
+// Friend routes - for friend requests and friendships
+try {
+    console.log('🔄 Loading friend routes...');
+    app.use('/api/friend', require('./routes/friendRoutes'));
+    console.log('✅ Friend routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading friend routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/friend', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Friend routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');
