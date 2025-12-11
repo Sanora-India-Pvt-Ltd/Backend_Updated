@@ -1,6 +1,8 @@
 const User = require('../models/User');
 const Media = require('../models/Media');
 const Company = require('../models/Company');
+const Institution = require('../models/Institution');
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
 const cloudinary = require('../config/cloudinary');
@@ -211,66 +213,103 @@ const updateProfile = async (req, res) => {
             updateData.workplace = processedWorkplace;
         }
 
-        // Handle education
+        // Handle education (array of education entries)
         if (education !== undefined) {
-            if (typeof education !== 'object' || Array.isArray(education)) {
+            if (!Array.isArray(education)) {
                 return res.status(400).json({
                     success: false,
-                    message: 'Education must be an object'
+                    message: 'Education must be an array'
                 });
             }
-            
-            const educationLevels = ['graduation', 'postGraduation', 'phd', 'interSchool', 'highSchool'];
-            const updatedEducation = user.education ? { ...user.education.toObject ? user.education.toObject() : user.education } : {};
-            
-            for (const level of educationLevels) {
-                if (education[level] !== undefined) {
-                    if (typeof education[level] !== 'object' || Array.isArray(education[level])) {
-                        return res.status(400).json({
-                            success: false,
-                            message: `Education ${level} must be an object`
+            // Validate each education entry and ensure institutions exist (if provided)
+            const processedEducation = [];
+            for (const edu of education) {
+                // Skip validation if institution or startYear are not provided (education is optional)
+                if (!edu.institution || !edu.startYear) {
+                    // Allow partial education entries - skip this entry if institution or startYear missing
+                    continue;
+                }
+                
+                if (isNaN(parseInt(edu.startYear)) || parseInt(edu.startYear) < 1900 || parseInt(edu.startYear) > new Date().getFullYear() + 10) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid startYear format (must be a valid year)'
+                    });
+                }
+                if (edu.endYear && (isNaN(parseInt(edu.endYear)) || parseInt(edu.endYear) < 1900 || parseInt(edu.endYear) > new Date().getFullYear() + 10)) {
+                            return res.status(400).json({
+                                success: false,
+                        message: 'Invalid endYear format (must be a valid year)'
+                    });
+                }
+
+                // Handle institution - can be ObjectId (string) or institution name (string)
+                let institution;
+                if (mongoose.Types.ObjectId.isValid(edu.institution)) {
+                    // It's an ObjectId - find by ID
+                    institution = await Institution.findById(edu.institution);
+                    if (!institution) {
+                            return res.status(400).json({
+                                success: false,
+                            message: `Institution with ID ${edu.institution} not found`
                         });
                     }
+                } else {
+                    // It's a name - find or create institution
+                    const institutionName = edu.institution.trim();
+                    const normalizedInstitutionName = institutionName.toLowerCase();
                     
-                    // Initialize if doesn't exist
-                    if (!updatedEducation[level]) {
-                        updatedEducation[level] = {};
-                    }
-                    
-                    // Update fields
-                    if (education[level].institution !== undefined) {
-                        updatedEducation[level].institution = education[level].institution.trim();
-                    }
-                    if (education[level].degree !== undefined && (level === 'graduation' || level === 'postGraduation' || level === 'phd')) {
-                        updatedEducation[level].degree = education[level].degree.trim();
-                    }
-                    if (education[level].percent !== undefined) {
-                        const percent = parseFloat(education[level].percent);
-                        if (isNaN(percent) || percent < 0 || percent > 100) {
-                            return res.status(400).json({
-                                success: false,
-                                message: `Education ${level} percent must be a number between 0 and 100`
+                    institution = await Institution.findOne({
+                        $or: [
+                            { name: institutionName },
+                            { normalizedName: normalizedInstitutionName }
+                        ]
+                    });
+
+                    // If institution doesn't exist, create it
+                    if (!institution) {
+                        try {
+                            // Determine type from context or default to 'school'
+                            const institutionType = edu.institutionType || 'school';
+                            institution = await Institution.create({
+                                name: institutionName,
+                                normalizedName: normalizedInstitutionName,
+                                type: ['school', 'college', 'university'].includes(institutionType) ? institutionType : 'school',
+                                city: edu.city || '',
+                                country: edu.country || '',
+                                logo: edu.logo || '',
+                                verified: false,
+                                isCustom: true,
+                                createdBy: user._id
                             });
+                            console.log(`✅ Created new institution: ${institutionName}`);
+                        } catch (error) {
+                            // Handle race condition - institution might have been created by another request
+                            if (error.code === 11000) {
+                                institution = await Institution.findOne({
+                                    $or: [
+                                        { name: institutionName },
+                                        { normalizedName: normalizedInstitutionName }
+                                    ]
+                                });
+                            } else {
+                                throw error;
+                            }
                         }
-                        updatedEducation[level].percent = percent;
-                    }
-                    if (education[level].cgpa !== undefined) {
-                        const cgpa = parseFloat(education[level].cgpa);
-                        if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) {
-                            return res.status(400).json({
-                                success: false,
-                                message: `Education ${level} CGPA must be a number between 0 and 10`
-                            });
-                        }
-                        updatedEducation[level].cgpa = cgpa;
-                    }
-                    if (education[level].grade !== undefined) {
-                        updatedEducation[level].grade = education[level].grade.trim();
                     }
                 }
+
+                // Process education entry
+                const processedEdu = {
+                    institution: institution._id, // Store institution ObjectID reference
+                    degree: edu.degree || '',
+                    field: edu.field || '',
+                    startYear: parseInt(edu.startYear),
+                    endYear: edu.endYear ? parseInt(edu.endYear) : null
+                };
+                processedEducation.push(processedEdu);
             }
-            
-            updateData.education = updatedEducation;
+            updateData.education = processedEducation;
         }
 
         // Check if there's anything to update
@@ -288,6 +327,7 @@ const updateProfile = async (req, res) => {
             { new: true, runValidators: true }
         )
         .populate('workplace.company', 'name isCustom')
+        .populate('education.institution', 'name type city country logo verified isCustom')
         .select('-password -refreshToken');
 
         // Format workplace to include company name
@@ -301,6 +341,24 @@ const updateProfile = async (req, res) => {
             startDate: work.startDate,
             endDate: work.endDate,
             isCurrent: work.isCurrent
+        }));
+
+        // Format education to include institution details
+        const formattedEducation = (updatedUser.education || []).map(edu => ({
+            institution: edu.institution ? {
+                id: edu.institution._id,
+                name: edu.institution.name,
+                type: edu.institution.type,
+                city: edu.institution.city,
+                country: edu.institution.country,
+                logo: edu.institution.logo,
+                verified: edu.institution.verified,
+                isCustom: edu.institution.isCustom
+            } : null,
+            degree: edu.degree,
+            field: edu.field,
+            startYear: edu.startYear,
+            endYear: edu.endYear
         }));
 
         res.status(200).json({
@@ -324,7 +382,7 @@ const updateProfile = async (req, res) => {
                     hometown: updatedUser.hometown,
                     relationshipStatus: updatedUser.relationshipStatus,
                     workplace: formattedWorkplace,
-                    education: updatedUser.education,
+                    education: formattedEducation,
                     createdAt: updatedUser.createdAt,
                     updatedAt: updatedUser.updatedAt
                 }

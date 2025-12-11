@@ -363,6 +363,42 @@ try {
     });
 }
 
+// Institution routes - for searching and creating institutions
+try {
+    console.log('🔄 Loading institution routes...');
+    app.use('/api/institution', require('./routes/institutionRoutes'));
+    console.log('✅ Institution routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading institution routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/institution', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Institution routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+// Post routes - for creating and fetching posts
+try {
+    console.log('🔄 Loading post routes...');
+    app.use('/api/posts', require('./routes/postRoutes'));
+    console.log('✅ Post routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading post routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/posts', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Post routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');

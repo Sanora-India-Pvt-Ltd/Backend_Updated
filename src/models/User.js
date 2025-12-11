@@ -97,110 +97,29 @@ const userSchema = new mongoose.Schema({
             default: false
         }
     }],
-    education: {
-        graduation: {
-            institution: {
-                type: String,
-                default: ''
-            },
-            degree: {
-                type: String,
-                default: ''
-            },
-            percent: {
-                type: Number,
-                default: undefined
-            },
-            cgpa: {
-                type: Number,
-                default: undefined
-            },
-            grade: {
-                type: String,
-                default: ''
-            }
+    education: [{
+        institution: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Institution',
+            required: false
         },
-        postGraduation: {
-            institution: {
-                type: String,
-                default: ''
-            },
-            degree: {
-                type: String,
-                default: ''
-            },
-            percent: {
-                type: Number,
-                default: undefined
-            },
-            cgpa: {
-                type: Number,
-                default: undefined
-            },
-            grade: {
-                type: String,
-                default: ''
-            }
+        degree: {
+            type: String,
+            default: ''
         },
-        phd: {
-            institution: {
-                type: String,
-                default: ''
-            },
-            degree: {
-                type: String,
-                default: ''
-            },
-            percent: {
-                type: Number,
-                default: undefined
-            },
-            cgpa: {
-                type: Number,
-                default: undefined
-            },
-            grade: {
-                type: String,
-                default: ''
-            }
+        field: {
+            type: String,
+            default: ''
         },
-        interSchool: {
-            institution: {
-                type: String,
-                default: ''
-            },
-            percent: {
-                type: Number,
-                default: undefined
-            },
-            cgpa: {
-                type: Number,
-                default: undefined
-            },
-            grade: {
-                type: String,
-                default: ''
-            }
+        startYear: {
+            type: Number,
+            required: false
         },
-        highSchool: {
-            institution: {
-                type: String,
-                default: ''
-            },
-            percent: {
-                type: Number,
-                default: undefined
-            },
-            cgpa: {
-                type: Number,
-                default: undefined
-            },
-            grade: {
-                type: String,
-                default: ''
-            }
+        endYear: {
+            type: Number,
+            default: null
         }
-    },
+    }],
     isGoogleOAuth: {
         type: Boolean,
         default: false

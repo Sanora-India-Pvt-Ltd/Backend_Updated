@@ -26,7 +26,15 @@
 4. [Company Management](#-company-management)
    - [Search Companies](#25-search-companies)
    - [Create Company](#26-create-company)
-5. [OTP Verification](#-otp-verification)
+5. [Institution Management](#-institution-management)
+   - [Search Institutions](#27-search-institutions)
+   - [Create Institution](#28-create-institution)
+6. [Posts Management](#-posts-management)
+   - [Upload Post Media](#29-upload-post-media)
+   - [Create Post](#30-create-post)
+   - [Get All Posts](#31-get-all-posts)
+   - [Get User Posts](#32-get-user-posts)
+7. [OTP Verification](#-otp-verification)
    - [Send OTP for Signup (Email)](#6-send-otp-for-signup-email)
    - [Verify OTP for Signup (Email)](#7-verify-otp-for-signup-email)
    - [Send Phone OTP for Signup](#8-send-phone-otp-for-signup)
@@ -34,16 +42,16 @@
    - [Send OTP for Password Reset](#10-send-otp-for-password-reset)
    - [Verify OTP for Password Reset](#11-verify-otp-for-password-reset)
    - [Reset Password](#12-reset-password)
-6. [Google OAuth](#-google-oauth)
+8. [Google OAuth](#-google-oauth)
    - [Web OAuth](#13-google-oauth-web-redirect-flow)
    - [OAuth Callback](#14-google-oauth-callback)
    - [Mobile OAuth](#15-google-oauth-mobile-androidios)
    - [Verify Google Token](#16-verify-google-token-androidiosweb)
    - [Check Email](#18-check-email-exists)
-7. [Authentication Flows](#-authentication-flows)
-8. [Error Handling](#-error-handling)
-9. [Security Features](#-security-features)
-10. [Testing Examples](#-testing-examples)
+9. [Authentication Flows](#-authentication-flows)
+10. [Error Handling](#-error-handling)
+11. [Security Features](#-security-features)
+12. [Testing Examples](#-testing-examples)
 
 ---
 
@@ -444,41 +452,40 @@ Authorization: Bearer your_access_token_here
           "isCurrent": false
         }
       ],
-      "education": {
-        "graduation": {
-          "institution": "University of Technology",
-          "degree": "Bachelor of Science in Computer Science",
-          "percent": 85.5,
-          "cgpa": 8.5,
-          "grade": "A"
+      "education": [
+        {
+          "institution": {
+            "id": "507f1f77bcf86cd799439020",
+            "name": "Delhi Public School",
+            "type": "school",
+            "city": "New Delhi",
+            "country": "India",
+            "logo": "",
+            "verified": false,
+            "isCustom": true
+          },
+          "degree": "B.Tech",
+          "field": "Computer Science",
+          "startYear": 2020,
+          "endYear": 2024
         },
-        "postGraduation": {
-          "institution": "Advanced University",
+        {
+          "institution": {
+            "id": "507f1f77bcf86cd799439021",
+            "name": "University of Technology",
+            "type": "university",
+            "city": "Mumbai",
+            "country": "India",
+            "logo": "",
+            "verified": false,
+            "isCustom": false
+          },
           "degree": "Master of Science",
-          "percent": 90.0,
-          "cgpa": 9.0,
-          "grade": "A+"
-        },
-        "phd": {
-          "institution": "",
-          "degree": "",
-          "percent": null,
-          "cgpa": null,
-          "grade": ""
-        },
-        "interSchool": {
-          "institution": "City College",
-          "percent": 88.0,
-          "cgpa": 8.8,
-          "grade": "A"
-        },
-        "highSchool": {
-          "institution": "High School Name",
-          "percent": 92.0,
-          "cgpa": 9.2,
-          "grade": "A+"
+          "field": "Data Science",
+          "startYear": 2024,
+          "endYear": null
         }
-      },
+      ],
       "isGoogleOAuth": false,
       "googleId": null,
       "createdAt": "2024-01-01T12:00:00.000Z",
@@ -538,41 +545,24 @@ Authorization: Bearer your_access_token_here
           "isCurrent": false
         }
       ],
-  "education": {
-    "graduation": {
+  "education": [
+    {
+      "institution": "Delhi Public School",
+      "degree": "B.Tech",
+      "field": "Computer Science",
+      "startYear": 2020,
+      "endYear": 2024,
+      "institutionType": "school"
+    },
+    {
       "institution": "University of Technology",
-      "degree": "Bachelor of Science in Computer Science",
-      "percent": 85.5,
-      "cgpa": 8.5,
-      "grade": "A"
-    },
-    "postGraduation": {
-      "institution": "Advanced University",
       "degree": "Master of Science",
-      "percent": 90.0,
-      "cgpa": 9.0,
-      "grade": "A+"
-    },
-    "phd": {
-      "institution": "Research University",
-      "degree": "Doctor of Philosophy",
-      "percent": 95.0,
-      "cgpa": 9.5,
-      "grade": "A+"
-    },
-    "interSchool": {
-      "institution": "City College",
-      "percent": 88.0,
-      "cgpa": 8.8,
-      "grade": "A"
-    },
-    "highSchool": {
-      "institution": "High School Name",
-      "percent": 92.0,
-      "cgpa": 9.2,
-      "grade": "A+"
+      "field": "Data Science",
+      "startYear": 2024,
+      "endYear": null,
+      "institutionType": "university"
     }
-  }
+  ]
 }
 ```
 
@@ -593,28 +583,25 @@ Authorization: Bearer your_access_token_here
   - `startDate` (string, required): Start date in ISO 8601 format (YYYY-MM-DD)
   - `endDate` (string, optional): End date in ISO 8601 format (YYYY-MM-DD). Set to `null` for current position
   - `isCurrent` (boolean, optional): Whether this is the current job (default: false)
-- `education` (object, optional): Education details with the following levels:
-  - `graduation` (object, optional): Graduation details
-    - `institution` (string, optional): Institution name
-    - `degree` (string, optional): Degree name
-    - `percent` (number, optional): Percentage scored (0-100)
-    - `cgpa` (number, optional): CGPA scored (0-10)
-    - `grade` (string, optional): Grade scored
-  - `postGraduation` (object, optional): Post-graduation details (same structure as graduation)
-  - `phd` (object, optional): PhD details (same structure as graduation)
-  - `interSchool` (object, optional): Intermediate/School details
-    - `institution` (string, optional): Institution name
-    - `percent` (number, optional): Percentage scored (0-100)
-    - `cgpa` (number, optional): CGPA scored (0-10)
-    - `grade` (string, optional): Grade scored
-  - `highSchool` (object, optional): High school details (same structure as interSchool)
+- `education` (array, optional): Array of education entries. Each entry can have:
+  - `institution` (string or ObjectId, required if entry provided): Institution name or ObjectId. **Note:** If the institution doesn't exist in the system, it will be automatically created when you update your profile. You can also search for institutions using the [Search Institutions](#27-search-institutions) endpoint before updating your profile.
+  - `degree` (string, optional): Degree name (e.g., "B.Tech", "Bachelor of Science")
+  - `field` (string, optional): Field of study (e.g., "Computer Science", "Engineering")
+  - `startYear` (number, required if entry provided): Start year (must be a valid year between 1900 and current year + 10)
+  - `endYear` (number, optional): End year (must be a valid year between 1900 and current year + 10). Set to `null` for ongoing education
+  - `institutionType` (string, optional): Type of institution - "school", "college", or "university" (default: "school"). Only used when creating a new institution.
+  - `city` (string, optional): City where institution is located. Only used when creating a new institution.
+  - `country` (string, optional): Country where institution is located. Only used when creating a new institution.
+  - `logo` (string, optional): Logo URL for the institution. Only used when creating a new institution.
 
 **Note:** 
 - You can update any combination of these fields. Only provided fields will be updated.
-- For education, you can update individual levels independently (e.g., only update `graduation` without affecting other levels)
+- **Multiple Education Entries:** You can provide multiple education entries in the array. Each entry represents a different educational qualification. The system will process all entries and create institutions automatically if they don't exist.
 - **Multiple Workplaces:** You can provide multiple workplace entries in the array. Each entry represents a different work experience. The system will process all entries and create companies automatically if they don't exist.
-- For workplace, you can replace the entire array or update individual entries
+- For workplace and education, you can replace the entire array or update individual entries
+- **Institution Auto-Creation:** When you provide an institution name in the `education` array, the system automatically checks if the institution exists. If it doesn't exist, it will be created automatically. You don't need to create institutions separately before updating your profile, though you can use the [Search Institutions](#27-search-institutions) endpoint to find existing institutions first.
 - **Company Auto-Creation:** When you provide a company name in the `workplace` array, the system automatically checks if the company exists. If it doesn't exist, it will be created automatically. You don't need to create companies separately before updating your profile, though you can use the [Search Companies](#25-search-companies) endpoint to find existing companies first.
+- **Education is Optional:** The education field is completely optional. You can provide an empty array `[]` to clear all education, or omit it entirely to leave education unchanged.
 - `relationshipStatus` and `hometown` are optional and can be set to `null` or empty string to clear
 
 **Success Response (200):**
@@ -663,41 +650,40 @@ Authorization: Bearer your_access_token_here
           "isCurrent": false
         }
       ],
-      "education": {
-        "graduation": {
-          "institution": "University of Technology",
-          "degree": "Bachelor of Science in Computer Science",
-          "percent": 85.5,
-          "cgpa": 8.5,
-          "grade": "A"
+      "education": [
+        {
+          "institution": {
+            "id": "507f1f77bcf86cd799439020",
+            "name": "Delhi Public School",
+            "type": "school",
+            "city": "New Delhi",
+            "country": "India",
+            "logo": "",
+            "verified": false,
+            "isCustom": true
+          },
+          "degree": "B.Tech",
+          "field": "Computer Science",
+          "startYear": 2020,
+          "endYear": 2024
         },
-        "postGraduation": {
-          "institution": "Advanced University",
+        {
+          "institution": {
+            "id": "507f1f77bcf86cd799439021",
+            "name": "University of Technology",
+            "type": "university",
+            "city": "Mumbai",
+            "country": "India",
+            "logo": "",
+            "verified": false,
+            "isCustom": false
+          },
           "degree": "Master of Science",
-          "percent": 90.0,
-          "cgpa": 9.0,
-          "grade": "A+"
-        },
-        "phd": {
-          "institution": "",
-          "degree": "",
-          "percent": null,
-          "cgpa": null,
-          "grade": ""
-        },
-        "interSchool": {
-          "institution": "City College",
-          "percent": 88.0,
-          "cgpa": 8.8,
-          "grade": "A"
-        },
-        "highSchool": {
-          "institution": "High School Name",
-          "percent": 92.0,
-          "cgpa": 9.2,
-          "grade": "A+"
+          "field": "Data Science",
+          "startYear": 2024,
+          "endYear": null
         }
-      },
+      ],
       "createdAt": "2024-01-01T12:00:00.000Z",
       "updatedAt": "2024-01-01T12:30:00.000Z"
     }
@@ -706,7 +692,7 @@ Authorization: Bearer your_access_token_here
 ```
 
 **Error Responses:**
-- `400`: Invalid date of birth (must be valid date, not in future, not more than 150 years ago), invalid gender, empty name fields, invalid cover photo URL, invalid relationship status, invalid workplace structure, invalid education structure, invalid percent/CGPA values (percent must be 0-100, CGPA must be 0-10)
+- `400`: Invalid date of birth (must be valid date, not in future, not more than 150 years ago), invalid gender, empty name fields, invalid cover photo URL, invalid relationship status, invalid workplace structure, invalid education structure, invalid year format (startYear and endYear must be valid years between 1900 and current year + 10)
 - `401`: No token, invalid token, expired token
 
 ---
@@ -1680,6 +1666,547 @@ Content-Type: application/json
 
 ---
 
+## 🎓 Institution Management
+
+### 27. Search Institutions
+
+**Method:** `GET`  
+**URL:** `/api/institution/search`  
+**Authentication:** Not required
+
+**Query Parameters:**
+- `query` (string, required): Institution name to search for
+- `type` (string, optional): Filter by institution type - "school", "college", or "university"
+
+**Example Request:**
+```bash
+GET /api/institution/search?query=Delhi Public School
+GET /api/institution/search?query=MIT&type=university
+```
+
+**Success Response (200) - Institutions Found:**
+```json
+{
+  "success": true,
+  "message": "Found 2 institution/institutions",
+  "data": {
+    "institutions": [
+      {
+        "id": "507f1f77bcf86cd799439020",
+        "name": "Delhi Public School",
+        "type": "school",
+        "city": "New Delhi",
+        "country": "India",
+        "logo": "",
+        "verified": false,
+        "isCustom": true,
+        "createdAt": "2024-01-15T10:30:00.000Z"
+      },
+      {
+        "id": "507f1f77bcf86cd799439021",
+        "name": "Delhi Public School - Noida",
+        "type": "school",
+        "city": "Noida",
+        "country": "India",
+        "logo": "",
+        "verified": false,
+        "isCustom": false,
+        "createdAt": "2024-01-10T08:20:00.000Z"
+      }
+    ],
+    "canAddCustom": false,
+    "suggestedName": null
+  }
+}
+```
+
+**Success Response (200) - No Institutions Found:**
+```json
+{
+  "success": true,
+  "message": "No institutions found",
+  "data": {
+    "institutions": [],
+    "canAddCustom": true,
+    "suggestedName": "ABC Coding School"
+  }
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Search query is required"
+}
+```
+
+**Notes:**
+- **Case-Insensitive Search:** The search is case-insensitive and matches partial institution names
+- **No Authentication Required:** This endpoint is public and can be used without authentication
+- **Type Filtering:** Optional `type` parameter allows filtering by institution type (school, college, university)
+- **Custom Entry Flag:** When `canAddCustom: true`, the frontend should show an option to add the institution as a custom entry
+- **Suggested Name:** When no matches are found, `suggestedName` contains the exact search query for easy creation
+- **Result Limit:** Maximum of 20 institutions are returned, sorted alphabetically
+
+---
+
+### 28. Create Institution
+
+**Method:** `POST`  
+**URL:** `/api/institution`  
+**Authentication:** Required
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "name": "ABC Coding School",
+  "type": "school",
+  "city": "New Delhi",
+  "country": "India",
+  "logo": "https://example.com/logo.png"
+}
+```
+
+**Required Fields:**
+- `name` (string, required): Institution name
+
+**Optional Fields:**
+- `type` (string, optional): Institution type - "school", "college", or "university" (default: "school")
+- `city` (string, optional): City where institution is located
+- `country` (string, optional): Country where institution is located
+- `logo` (string, optional): Logo URL for the institution
+
+**Success Response (201) - Institution Created:**
+```json
+{
+  "success": true,
+  "message": "Institution created successfully",
+  "data": {
+    "institution": {
+      "id": "507f1f77bcf86cd799439022",
+      "name": "ABC Coding School",
+      "type": "school",
+      "city": "New Delhi",
+      "country": "India",
+      "logo": "https://example.com/logo.png",
+      "verified": false,
+      "isCustom": true,
+      "createdAt": "2024-01-15T12:00:00.000Z"
+    }
+  }
+}
+```
+
+**Success Response (200) - Institution Already Exists:**
+```json
+{
+  "success": true,
+  "message": "Institution already exists",
+  "data": {
+    "institution": {
+      "id": "507f1f77bcf86cd799439020",
+      "name": "ABC Coding School",
+      "type": "school",
+      "city": "New Delhi",
+      "country": "India",
+      "logo": "",
+      "verified": false,
+      "isCustom": true,
+      "createdAt": "2024-01-15T10:30:00.000Z"
+    }
+  }
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Institution name is required"
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "success": false,
+  "message": "Error creating institution",
+  "error": "Error details (only in development)"
+}
+```
+
+**Notes:**
+- **Authentication Required:** This endpoint requires a valid access token
+- **Case-Insensitive Duplicates:** The system prevents duplicate institutions (case-insensitive). If an institution with the same name (ignoring case) already exists, it returns the existing institution
+- **Auto-Normalization:** Institution names are automatically normalized and stored consistently
+- **Custom Flag:** All user-created institutions are marked as `isCustom: true`
+- **Automatic Creation:** Institutions are also automatically created when users update their profile with education information (see [Update Profile](#17-update-user-profile))
+- **Type Default:** If no type is provided or an invalid type is provided, it defaults to "school"
+
+**Frontend Flow Example:**
+1. User types: "ABC Coding School"
+2. Frontend calls: `GET /api/institution/search?query=ABC Coding School`
+3. If `canAddCustom: true` → Show: "Add ABC Coding School?"
+4. When user selects it → Frontend calls: `POST /api/institution` with `{ "name": "ABC Coding School", "type": "school" }`
+5. Backend creates the institution and returns it
+6. Frontend can now use this institution in profile updates
+
+---
+
+## 📝 Posts Management
+
+### 29. Upload Post Media
+
+**Method:** `POST`  
+**URL:** `/api/posts/upload-media`  
+**Authentication:** Required
+
+**Description:**  
+Upload images or videos for posts. Files are uploaded to Cloudinary in user-specific folders (`user_uploads/{userId}/posts`). This endpoint is used as part of the post creation flow - upload media first, then create the post with the returned URLs.
+
+**Content-Type:** `multipart/form-data`
+
+**Request:**
+- **Field Name:** `media` (required)
+- **File Types:** Images (JPEG, PNG, GIF, WebP, etc.) and Videos (MP4, MOV, AVI, etc.)
+- **Max File Size:** 20MB
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example using cURL:**
+```bash
+curl -X POST https://api.sanoraindia.com/api/posts/upload-media \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -F "media=@/path/to/your/image.jpg"
+```
+
+**Example using JavaScript (FormData):**
+```javascript
+const formData = new FormData();
+formData.append('media', fileInput.files[0]);
+
+const response = await fetch('https://api.sanoraindia.com/api/posts/upload-media', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  },
+  body: formData
+});
+
+const result = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Media uploaded successfully",
+  "data": {
+    "url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/posts/abc123.jpg",
+    "publicId": "user_uploads/user_id/posts/abc123",
+    "type": "image",
+    "format": "jpg",
+    "fileSize": 245678,
+    "mediaId": "media_record_id"
+  }
+}
+```
+
+**Response Fields:**
+- `url` (string): Secure HTTPS URL of the uploaded file
+- `publicId` (string): Cloudinary public ID
+- `type` (string): Media type - "image" or "video"
+- `format` (string): File format (e.g., "jpg", "png", "mp4")
+- `fileSize` (number): File size in bytes
+- `mediaId` (string): Database record ID for the upload
+
+**Error Responses:**
+- `400`: No file uploaded
+- `401`: Not authenticated
+- `500`: Upload failed
+
+**Note:** Use the returned `url`, `publicId`, and `type` in the create post endpoint.
+
+---
+
+### 30. Create Post
+
+**Method:** `POST`  
+**URL:** `/api/posts/create`  
+**Authentication:** Required
+
+**Description:**  
+Create a new post. Posts can have a caption, media (images/videos), or both. Media URLs should be obtained from the upload post media endpoint first.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "caption": "Check out this amazing sunset! 🌅",
+  "mediaUrls": [
+    {
+      "url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/posts/abc123.jpg",
+      "publicId": "user_uploads/user_id/posts/abc123",
+      "type": "image",
+      "format": "jpg"
+    }
+  ]
+}
+```
+
+**Fields:**
+- `caption` (string, optional): Post caption (max 2200 characters). Post must have either caption or media (or both).
+- `mediaUrls` (array, optional): Array of media objects. Each object must have:
+  - `url` (string, required): Media URL from upload endpoint
+  - `publicId` (string, required): Cloudinary public ID from upload endpoint
+  - `type` (string, required): "image" or "video"
+  - `format` (string, optional): File format (e.g., "jpg", "mp4")
+
+**Text-Only Post Example:**
+```json
+{
+  "caption": "Just a text post!"
+}
+```
+
+**Media-Only Post Example:**
+```json
+{
+  "mediaUrls": [
+    {
+      "url": "https://res.cloudinary.com/...",
+      "publicId": "user_uploads/user_id/posts/abc123",
+      "type": "image"
+    }
+  ]
+}
+```
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "Post created successfully",
+  "data": {
+    "post": {
+      "id": "post_id",
+      "userId": "user_id",
+      "user": {
+        "id": "user_id",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "email": "user@example.com",
+        "profileImage": "https://..."
+      },
+      "caption": "Check out this amazing sunset! 🌅",
+      "media": [
+        {
+          "url": "https://res.cloudinary.com/...",
+          "publicId": "user_uploads/user_id/posts/abc123",
+          "type": "image",
+          "format": "jpg"
+        }
+      ],
+      "likes": [],
+      "comments": [],
+      "likeCount": 0,
+      "commentCount": 0,
+      "createdAt": "2024-01-15T10:30:00.000Z",
+      "updatedAt": "2024-01-15T10:30:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Post must have either caption or media, invalid media structure, invalid media type
+- `401`: Not authenticated
+- `500`: Failed to create post
+
+**Note:** 
+- At least one of `caption` or `mediaUrls` must be provided
+- Media URLs should come from the `/api/posts/upload-media` endpoint
+- Posts support multiple media items (carousel posts)
+
+---
+
+### 31. Get All Posts
+
+**Method:** `GET`  
+**URL:** `/api/posts/all`  
+**Authentication:** Not required
+
+**Description:**  
+Retrieve all posts for the feed. Results are sorted by newest first and include pagination support.
+
+**Query Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Number of posts per page (default: 10)
+
+**Example Request:**
+```bash
+GET /api/posts/all?page=1&limit=10
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Posts retrieved successfully",
+  "data": {
+    "posts": [
+      {
+        "id": "post_id_1",
+        "userId": "user_id",
+        "user": {
+          "id": "user_id",
+          "firstName": "John",
+          "lastName": "Doe",
+          "name": "John Doe",
+          "email": "user@example.com",
+          "profileImage": "https://..."
+        },
+        "caption": "Check out this amazing sunset! 🌅",
+        "media": [
+          {
+            "url": "https://res.cloudinary.com/...",
+            "publicId": "user_uploads/user_id/posts/abc123",
+            "type": "image",
+            "format": "jpg"
+          }
+        ],
+        "likes": [],
+        "comments": [],
+        "likeCount": 0,
+        "commentCount": 0,
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalPosts": 50,
+      "hasNextPage": true,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+**Response Fields:**
+- `posts` (array): Array of post objects
+- `pagination` (object): Pagination metadata
+  - `currentPage` (number): Current page number
+  - `totalPages` (number): Total number of pages
+  - `totalPosts` (number): Total number of posts
+  - `hasNextPage` (boolean): Whether there are more pages
+  - `hasPrevPage` (boolean): Whether there are previous pages
+
+**Error Responses:**
+- `500`: Failed to retrieve posts
+
+**Note:** 
+- Results are sorted by creation date (newest first)
+- User information, likes, and comments are automatically populated
+- This endpoint is public (no authentication required)
+
+---
+
+### 32. Get User Posts
+
+**Method:** `GET`  
+**URL:** `/api/posts/user/:id`  
+**Authentication:** Not required
+
+**Description:**  
+Retrieve all posts by a specific user. Results are sorted by newest first and include pagination support.
+
+**URL Parameters:**
+- `id` (string, required): User ID
+
+**Query Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Number of posts per page (default: 10)
+
+**Example Request:**
+```bash
+GET /api/posts/user/user_id_123?page=1&limit=10
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "User posts retrieved successfully",
+  "data": {
+    "user": {
+      "id": "user_id",
+      "name": "John Doe",
+      "email": "user@example.com",
+      "profileImage": "https://..."
+    },
+    "posts": [
+      {
+        "id": "post_id_1",
+        "userId": "user_id",
+        "user": {
+          "id": "user_id",
+          "firstName": "John",
+          "lastName": "Doe",
+          "name": "John Doe",
+          "email": "user@example.com",
+          "profileImage": "https://..."
+        },
+        "caption": "My first post!",
+        "media": [],
+        "likes": [],
+        "comments": [],
+        "likeCount": 0,
+        "commentCount": 0,
+        "createdAt": "2024-01-15T10:30:00.000Z",
+        "updatedAt": "2024-01-15T10:30:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 2,
+      "totalPosts": 15,
+      "hasNextPage": true,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid user ID
+- `404`: User not found
+- `500`: Failed to retrieve user posts
+
+**Note:** 
+- Results are sorted by creation date (newest first)
+- User information, likes, and comments are automatically populated
+- This endpoint is public (no authentication required)
+
+---
+
 ## 📧 OTP Verification
 
 ### 6. Send OTP for Signup (Email)
@@ -2494,20 +3021,29 @@ curl -X PUT https://api.sanoraindia.com/api/user/profile \
     ]
   }'
 
-# Update education (example: graduation only)
+# Update education (example: add education entries)
 curl -X PUT https://api.sanoraindia.com/api/user/profile \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "education": {
-      "graduation": {
+    "education": [
+      {
+        "institution": "Delhi Public School",
+        "degree": "B.Tech",
+        "field": "Computer Science",
+        "startYear": 2020,
+        "endYear": 2024,
+        "institutionType": "school"
+      },
+      {
         "institution": "University of Technology",
-        "degree": "Bachelor of Science in Computer Science",
-        "percent": 85.5,
-        "cgpa": 8.5,
-        "grade": "A"
+        "degree": "Master of Science",
+        "field": "Data Science",
+        "startYear": 2024,
+        "endYear": null,
+        "institutionType": "university"
       }
-    }
+    ]
   }'
 ```
 
@@ -2718,6 +3254,97 @@ curl -X DELETE https://api.sanoraindia.com/api/media/MEDIA_ID \
 - Users can only access their own media files
 - Old profile images are automatically deleted when uploading a new one
 
+### Create Post
+
+```bash
+# 1. Upload media for post (optional - can create text-only posts)
+ACCESS_TOKEN=$(curl -X POST https://api.sanoraindia.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"MyPassword123"}' \
+  | jq -r '.data.accessToken')
+
+# Upload media
+MEDIA_RESPONSE=$(curl -X POST https://api.sanoraindia.com/api/posts/upload-media \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -F "media=@/path/to/image.jpg")
+
+# Extract media URL and publicId from response
+MEDIA_URL=$(echo $MEDIA_RESPONSE | jq -r '.data.url')
+PUBLIC_ID=$(echo $MEDIA_RESPONSE | jq -r '.data.publicId')
+MEDIA_TYPE=$(echo $MEDIA_RESPONSE | jq -r '.data.type')
+
+# 2. Create post with media
+curl -X POST https://api.sanoraindia.com/api/posts/create \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"caption\": \"Check out this amazing sunset! 🌅\",
+    \"mediaUrls\": [{
+      \"url\": \"$MEDIA_URL\",
+      \"publicId\": \"$PUBLIC_ID\",
+      \"type\": \"$MEDIA_TYPE\"
+    }]
+  }"
+
+# Or create text-only post
+curl -X POST https://api.sanoraindia.com/api/posts/create \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "caption": "Just a text post!"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Post created successfully",
+  "data": {
+    "post": {
+      "id": "post_id",
+      "userId": "user_id",
+      "user": {
+        "id": "user_id",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "email": "user@example.com",
+        "profileImage": "https://..."
+      },
+      "caption": "Check out this amazing sunset! 🌅",
+      "media": [...],
+      "likes": [],
+      "comments": [],
+      "likeCount": 0,
+      "commentCount": 0,
+      "createdAt": "2024-01-15T10:30:00.000Z"
+    }
+  }
+}
+```
+
+### Get All Posts
+
+```bash
+# Get all posts (feed) with pagination
+curl -X GET "https://api.sanoraindia.com/api/posts/all?page=1&limit=10"
+```
+
+### Get User Posts
+
+```bash
+# Get posts by specific user
+curl -X GET "https://api.sanoraindia.com/api/posts/user/user_id_123?page=1&limit=10"
+```
+
+**Important Notes:**
+- Post creation requires authentication
+- Posts can be text-only, media-only, or both
+- Media must be uploaded first using `/api/posts/upload-media`
+- Get posts endpoints are public (no authentication required)
+- All posts include pagination support
+
 ---
 
 
@@ -2802,24 +3429,27 @@ curl -X DELETE https://api.sanoraindia.com/api/media/MEDIA_ID \
    ```bash
    PUT /api/user/profile
    Body: {
-     "education": {
-       "graduation": {
-         "institution": "University of Technology",
-         "degree": "Bachelor of Science",
-         "percent": 85.5,
-         "cgpa": 8.5,
-         "grade": "A"
+     "education": [
+       {
+         "institution": "Delhi Public School",
+         "degree": "B.Tech",
+         "field": "Computer Science",
+         "startYear": 2020,
+         "endYear": 2024,
+         "institutionType": "school"
        },
-       "highSchool": {
-         "institution": "High School Name",
-         "percent": 92.0,
-         "cgpa": 9.2,
-         "grade": "A+"
+       {
+         "institution": "University of Technology",
+         "degree": "Master of Science",
+         "field": "Data Science",
+         "startYear": 2024,
+         "endYear": null,
+         "institutionType": "university"
        }
-     }
+     ]
    }
    ```
-   → Updates education details (can update individual levels: graduation, postGraduation, phd, interSchool, highSchool)
+   → Updates education details (can add multiple education entries). Institutions are automatically created if they don't exist.
 
 ### Update Phone Number Flow
 
