@@ -1157,6 +1157,67 @@ const getUserMedia = async (req, res) => {
     }
 };
 
+// Get user's images only - ensures users can only see their own uploads
+const getUserImages = async (req, res) => {
+    try {
+        const user = req.user; // From protect middleware
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        // Query only images belonging to this specific user
+        const images = await Media.find({ 
+            userId: user._id,
+            resource_type: 'image' // Filter only images
+        })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .select('-__v');
+
+        // Get total count for pagination
+        const totalImages = await Media.countDocuments({ 
+            userId: user._id,
+            resource_type: 'image' 
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Images retrieved successfully",
+            data: {
+                count: images.length,
+                totalImages: totalImages,
+                images: images.map(item => ({
+                    id: item._id,
+                    url: item.url,
+                    public_id: item.public_id,
+                    format: item.format,
+                    type: item.resource_type,
+                    fileSize: item.fileSize,
+                    originalFilename: item.originalFilename,
+                    folder: item.folder,
+                    uploadedAt: item.createdAt
+                })),
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(totalImages / limit),
+                    totalImages: totalImages,
+                    hasNextPage: page < Math.ceil(totalImages / limit),
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('Get user images error:', err);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to retrieve images",
+            error: err.message
+        });
+    }
+};
+
 // Delete user's media - ensures users can only delete their own uploads
 const deleteUserMedia = async (req, res) => {
     try {
@@ -2018,6 +2079,7 @@ module.exports = {
     uploadProfileImage,
     uploadCoverPhoto,
     getUserMedia,
+    getUserImages,
     deleteUserMedia,
     updateProfileMedia,
     updatePersonalInfo,

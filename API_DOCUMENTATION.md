@@ -24,21 +24,22 @@
    - [Update Alternate Phone Number](#19-update-alternate-phone-number)
    - [Remove Alternate Phone Number](#20-remove-alternate-phone-number)
    - [Upload Media](#21-upload-media-to-cloudinary)
-   - [](#23-get-users-media)
-   - [Delete User's Media](#24-delete-users-media)
+   - [Get User's Media](#23-get-users-media)
+   - [Get User's Images](#24-get-users-images)
+   - [Delete User's Media](#25-delete-users-media)
 4. [Company Management](#-company-management)
-   - [Search Companies](#25-search-companies)
-   - [Create Company](#26-create-company)
+   - [Search Companies](#26-search-companies)
+   - [Create Company](#27-create-company)
 5. [Institution Management](#-institution-management)
-   - [Search Institutions](#27-search-institutions)
-   - [Create Institution](#28-create-institution)
+   - [Search Institutions](#28-search-institutions)
+   - [Create Institution](#29-create-institution)
 6. [Posts Management](#-posts-management)
-   - [Upload Post Media](#29-upload-post-media)
-   - [Create Post](#30-create-post)
-   - [Get All Posts](#31-get-all-posts)
-   - [Get My Posts](#32-get-my-posts)
-   - [Get User Posts](#33-get-user-posts)
-   - [Delete Post](#34-delete-post)
+   - [Upload Post Media](#30-upload-post-media)
+   - [Create Post](#31-create-post)
+   - [Get All Posts](#32-get-all-posts)
+   - [Get My Posts](#33-get-my-posts)
+   - [Get User Posts](#34-get-user-posts)
+   - [Delete Post](#35-delete-post)
 7. [Stories Management](#-stories-management)
    - [Upload Story Media](#42-upload-story-media)
    - [Create Story](#43-create-story)
@@ -1705,7 +1706,140 @@ Authorization: Bearer your_access_token_here
 
 ---
 
-### 24. Delete User's Media
+### 24. Get User's Images
+
+**Method:** `GET`  
+**URL:** `/api/media/my-images`  
+**Authentication:** Required
+
+**Description:**  
+Retrieve all image files (excluding videos) uploaded by the authenticated user. **Users can only see their own uploads** - the response is automatically filtered by the authenticated user's ID and only includes images. This endpoint supports pagination.
+
+**Query Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Number of images per page (default: 20)
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/media/my-images?page=1&limit=20
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.sanoraindia.com/api/media/my-images?page=1&limit=20" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.sanoraindia.com/api/media/my-images?page=1&limit=20', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  }
+});
+
+const result = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Images retrieved successfully",
+  "data": {
+    "count": 10,
+    "totalImages": 45,
+    "images": [
+      {
+        "id": "media_record_id_1",
+        "url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/image1.jpg",
+        "public_id": "user_uploads/user_id/image1",
+        "format": "jpg",
+        "type": "image",
+        "fileSize": 245678,
+        "originalFilename": "my-image.jpg",
+        "folder": "user_uploads/user_id",
+        "uploadedAt": "2024-01-15T10:30:00.000Z"
+      },
+      {
+        "id": "media_record_id_2",
+        "url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/image2.png",
+        "public_id": "user_uploads/user_id/image2",
+        "format": "png",
+        "type": "image",
+        "fileSize": 189234,
+        "originalFilename": "my-image2.png",
+        "folder": "user_uploads/user_id",
+        "uploadedAt": "2024-01-14T09:20:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalImages": 45,
+      "hasNextPage": true,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+**Response Fields:**
+- `count` (number): Number of images in the current page
+- `totalImages` (number): Total number of images for the user
+- `images` (array): Array of image objects, each containing:
+  - `id` (string): Database record ID
+  - `url` (string): Secure HTTPS URL of the image
+  - `public_id` (string): Cloudinary public ID
+  - `format` (string): File format (e.g., "jpg", "png", "webp")
+  - `type` (string): Resource type - always "image"
+  - `fileSize` (number): File size in bytes
+  - `originalFilename` (string): Original filename when uploaded
+  - `folder` (string): Cloudinary folder path
+  - `uploadedAt` (string): ISO 8601 timestamp of when the file was uploaded
+- `pagination` (object): Pagination information:
+  - `currentPage` (number): Current page number
+  - `totalPages` (number): Total number of pages
+  - `totalImages` (number): Total number of images
+  - `hasNextPage` (boolean): Whether there is a next page
+  - `hasPrevPage` (boolean): Whether there is a previous page
+
+**Error Responses:**
+
+**401 - Not Authenticated:**
+```json
+{
+  "success": false,
+  "message": "Not authorized to access this route"
+}
+```
+
+**500 - Retrieval Failed:**
+```json
+{
+  "success": false,
+  "message": "Failed to retrieve images",
+  "error": "Error details (in development mode)"
+}
+```
+
+**Notes:**
+- **Authentication Required:** This endpoint requires a valid access token in the Authorization header
+- **User-Specific:** Only returns image files uploaded by the authenticated user
+- **Images Only:** This endpoint filters out videos and only returns images (resource_type: 'image')
+- **Sorted by Date:** Results are sorted by creation date (newest first)
+- **Pagination:** Supports pagination with `page` and `limit` query parameters
+- **Security:** Users cannot see other users' images
+
+---
+
+### 25. Delete User's Media
 
 **Method:** `DELETE`  
 **URL:** `/api/media/:mediaId`  
@@ -1794,7 +1928,7 @@ const result = await response.json();
 
 ## 🏢 Company Management
 
-### 25. Search Companies
+### 26. Search Companies
 
 **Method:** `GET`  
 **URL:** `/api/company/search`  
@@ -1864,7 +1998,7 @@ GET /api/company/search?query=BlueSky Innovations
 
 ---
 
-### 26. Create Company
+### 27. Create Company
 
 **Method:** `POST`  
 **URL:** `/api/company`  
@@ -1951,7 +2085,7 @@ Content-Type: application/json
 
 ## 🎓 Institution Management
 
-### 27. Search Institutions
+### 28. Search Institutions
 
 **Method:** `GET`  
 **URL:** `/api/institution/search`  
@@ -2034,7 +2168,7 @@ GET /api/institution/search?query=MIT&type=university
 
 ---
 
-### 28. Create Institution
+### 29. Create Institution
 
 **Method:** `POST`  
 **URL:** `/api/institution`  
@@ -2145,7 +2279,7 @@ Content-Type: application/json
 
 ## 📝 Posts Management
 
-### 29. Upload Post Media
+### 30. Upload Post Media
 
 **Method:** `POST`  
 **URL:** `/api/posts/upload-media`  
@@ -2222,7 +2356,7 @@ const result = await response.json();
 
 ---
 
-### 30. Create Post
+### 31. Create Post
 
 **Method:** `POST`  
 **URL:** `/api/posts/create`  
@@ -2329,7 +2463,7 @@ Content-Type: application/json
 
 ---
 
-### 31. Get All Posts
+### 32. Get All Posts
 
 **Method:** `GET`  
 **URL:** `/api/posts/all`  
@@ -2412,7 +2546,7 @@ GET /api/posts/all?page=1&limit=10
 
 ---
 
-### 32. Get My Posts
+### 33. Get My Posts
 
 **Method:** `GET`  
 **URL:** `/api/posts/me`  
@@ -2488,7 +2622,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 33. Get User Posts
+### 34. Get User Posts
 
 **Method:** `GET`  
 **URL:** `/api/posts/user/:id`  
@@ -2566,7 +2700,7 @@ GET /api/posts/user/user_id_123?page=1&limit=10
 
 ---
 
-### 34. Delete Post
+### 35. Delete Post
 
 **Method:** `DELETE`  
 **URL:** `/api/posts/:id`  
