@@ -55,7 +55,16 @@
    - [Get Friend Suggestions](#54-get-friend-suggestions)
    - [Unfriend User](#52-unfriend-user)
    - [Cancel Sent Request](#53-cancel-sent-friend-request)
-9. [OTP Verification](#-otp-verification)
+9. [Chat/Messaging](#-chatmessaging)
+   - [Get All Conversations](#55-get-all-conversations)
+   - [Get or Create Conversation](#56-get-or-create-conversation)
+   - [Get Messages](#57-get-messages)
+   - [Send Message (REST)](#58-send-message-rest)
+   - [Delete Message](#59-delete-message)
+   - [Mark Messages as Read](#60-mark-messages-as-read)
+   - [Get Unread Count](#61-get-unread-count)
+   - [WebSocket Events](#websocket-events)
+10. [OTP Verification](#-otp-verification)
    - [Send OTP for Signup (Email)](#6-send-otp-for-signup-email)
    - [Verify OTP for Signup (Email)](#7-verify-otp-for-signup-email)
    - [Send Phone OTP for Signup](#8-send-phone-otp-for-signup)
@@ -63,16 +72,16 @@
    - [Send OTP for Password Reset](#10-send-otp-for-password-reset)
    - [Verify OTP for Password Reset](#11-verify-otp-for-password-reset)
    - [Reset Password](#12-reset-password)
-10. [Google OAuth](#-google-oauth)
+11. [Google OAuth](#-google-oauth)
    - [Web OAuth](#13-google-oauth-web-redirect-flow)
    - [OAuth Callback](#14-google-oauth-callback)
    - [Mobile OAuth](#15-google-oauth-mobile-androidios)
    - [Verify Google Token](#16-verify-google-token-androidiosweb)
    - [Check Email](#18-check-email-exists)
-11. [Authentication Flows](#-authentication-flows)
-12. [Error Handling](#-error-handling)
-13. [Security Features](#-security-features)
-14. [Testing Examples](#-testing-examples)
+12. [Authentication Flows](#-authentication-flows)
+13. [Error Handling](#-error-handling)
+14. [Security Features](#-security-features)
+15. [Testing Examples](#-testing-examples)
 
 ---
 
@@ -738,8 +747,7 @@ Content-Type: application/json
 {
   "bio": "Software developer passionate about building great products",
   "coverPhoto": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/cover/cover123.jpg",
-  "profileImage": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/profile/profile123.jpg",
-  "coverImage": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/cover/cover123.jpg"
+  "profileImage": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/profile/profile123.jpg"
 }
 ```
 
@@ -3667,6 +3675,732 @@ Authorization: Bearer <your_access_token>
 **Note:** 
 - Only the sender can cancel their own pending requests
 - Request must be in "pending" status to be cancelled
+
+---
+
+## 💬 Chat/Messaging
+
+The chat system provides real-time messaging capabilities using WebSocket (Socket.IO) and REST API endpoints. All chat endpoints require authentication.
+
+### ⚠️ Important: Protocol Usage
+
+**REST API Endpoints** (for fetching data):
+- Use `https://` (or `http://` for local development)
+- Example: `https://api.sanoraindia.com/api/chat/conversations`
+
+**WebSocket Connection** (for real-time messaging):
+- Use `wss://` (or `ws://` for local development) - **NO `/api/chat` path**
+- Example: `wss://api.sanoraindia.com` (Socket.IO handles the path automatically)
+
+**Do NOT use `wss://` for REST API endpoints!** Use `https://` instead.
+
+### WebSocket Connection
+
+**Base URL:** `ws://localhost:3100` (local) or `wss://api.sanoraindia.com` (production)
+
+**Connection:**
+```javascript
+import io from 'socket.io-client';
+
+const socket = io('http://localhost:3100', {
+  auth: {
+    token: 'YOUR_JWT_ACCESS_TOKEN'
+  },
+  transports: ['websocket', 'polling']
+});
+```
+
+**Note:** WebSocket is the preferred method for real-time messaging. REST API endpoints are available as fallback.
+
+---
+
+### 55. Get All Conversations
+
+**Method:** `GET`  
+**URL:** `/api/chat/conversations`  
+**Authentication:** Required
+
+**Description:**  
+Retrieve all conversations for the authenticated user. Returns conversations sorted by last message time (newest first), with participant information and online status.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/chat/conversations
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.sanoraindia.com/api/chat/conversations" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**⚠️ Note:** Use `https://` (not `wss://`) for REST API endpoints. `wss://` is only for WebSocket connections.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "conversation_id",
+      "participants": [
+        {
+          "_id": "user_id_1",
+          "firstName": "John",
+          "lastName": "Doe",
+          "name": "John Doe",
+          "profileImage": "https://...",
+          "isOnline": true,
+          "lastSeen": 1704067200000
+        },
+        {
+          "_id": "user_id_2",
+          "firstName": "Jane",
+          "lastName": "Smith",
+          "name": "Jane Smith",
+          "profileImage": "https://...",
+          "isOnline": false,
+          "lastSeen": 1704067000000
+        }
+      ],
+      "lastMessage": {
+        "_id": "message_id",
+        "text": "Hello!",
+        "senderId": {
+          "_id": "user_id_1",
+          "firstName": "John",
+          "lastName": "Doe",
+          "name": "John Doe",
+          "profileImage": "https://..."
+        },
+        "status": "read",
+        "createdAt": "2024-01-01T12:00:00.000Z"
+      },
+      "lastMessageAt": "2024-01-01T12:00:00.000Z",
+      "isGroup": false,
+      "createdAt": "2024-01-01T10:00:00.000Z",
+      "updatedAt": "2024-01-01T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+- `participants` (array): Array of user objects with online status
+  - `isOnline` (boolean): Whether user is currently online
+  - `lastSeen` (number): Timestamp of last seen
+- `lastMessage` (object|null): Most recent message in conversation
+- `lastMessageAt` (date): Timestamp of last message
+
+**Error Responses:**
+- `401`: Not authenticated
+- `500`: Failed to fetch conversations
+
+---
+
+### 56. Get or Create Conversation
+
+**Method:** `GET`  
+**URL:** `/api/chat/conversation/:participantId`  
+**Authentication:** Required
+
+**Description:**  
+Get an existing conversation with a specific user, or create a new one if it doesn't exist. This is typically used when starting a new chat.
+
+**Path Parameters:**
+- `participantId` (string, required): ID of the user to chat with
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/chat/conversation/507f1f77bcf86cd799439011
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.sanoraindia.com/api/chat/conversation/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "conversation_id",
+    "participants": [
+      {
+        "_id": "user_id_1",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "profileImage": "https://...",
+        "isOnline": true,
+        "lastSeen": 1704067200000
+      },
+      {
+        "_id": "user_id_2",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "name": "Jane Smith",
+        "profileImage": "https://...",
+        "isOnline": false,
+        "lastSeen": 1704067000000
+      }
+    ],
+    "lastMessage": null,
+    "lastMessageAt": "2024-01-01T10:00:00.000Z",
+    "isGroup": false,
+    "createdAt": "2024-01-01T10:00:00.000Z",
+    "updatedAt": "2024-01-01T10:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Cannot create conversation with yourself, participant ID required
+- `401`: Not authenticated
+- `404`: User not found
+- `429`: Too many conversation requests (rate limited)
+- `500`: Failed to get or create conversation
+
+**Note:** 
+- Rate limited to 10 conversations per hour per user
+- Cannot create conversation with yourself
+
+---
+
+### 57. Get Messages
+
+**Method:** `GET`  
+**URL:** `/api/chat/conversation/:conversationId/messages`  
+**Authentication:** Required
+
+**Description:**  
+Retrieve messages for a specific conversation with pagination support. Messages are returned in chronological order (oldest first). Messages are automatically marked as read when fetched.
+
+**Path Parameters:**
+- `conversationId` (string, required): ID of the conversation
+
+**Query Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Number of messages per page (default: 50, max: 100)
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/chat/conversation/507f1f77bcf86cd799439011/messages?page=1&limit=50
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.sanoraindia.com/api/chat/conversation/507f1f77bcf86cd799439011/messages?page=1&limit=50" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "message_id",
+      "conversationId": "conversation_id",
+      "senderId": {
+        "_id": "user_id",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "profileImage": "https://..."
+      },
+      "text": "Hello!",
+      "media": [],
+      "messageType": "text",
+      "status": "read",
+      "replyTo": null,
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:00:00.000Z"
+    },
+    {
+      "_id": "message_id_2",
+      "conversationId": "conversation_id",
+      "senderId": {
+        "_id": "user_id_2",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "name": "Jane Smith",
+        "profileImage": "https://..."
+      },
+      "text": "Hi there!",
+      "media": [
+        {
+          "url": "https://example.com/image.jpg",
+          "type": "image",
+          "filename": "image.jpg",
+          "size": 1024000
+        }
+      ],
+      "messageType": "image",
+      "status": "read",
+      "replyTo": "message_id",
+      "createdAt": "2024-01-01T12:05:00.000Z",
+      "updatedAt": "2024-01-01T12:05:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 150
+  }
+}
+```
+
+**Response Fields:**
+- `data` (array): Array of message objects
+  - `text` (string|null): Message text (null if media-only)
+  - `media` (array): Array of media objects
+    - `url` (string): Media URL
+    - `type` (string): "image" | "video" | "audio" | "file"
+    - `filename` (string|null): Original filename
+    - `size` (number|null): File size in bytes
+  - `messageType` (string): "text" | "image" | "video" | "audio" | "file"
+  - `status` (string): "sent" | "delivered" | "read"
+  - `replyTo` (object|null): Message being replied to
+- `pagination` (object): Pagination metadata
+
+**Error Responses:**
+- `401`: Not authenticated
+- `403`: Not authorized to view this conversation
+- `404`: Conversation not found
+- `500`: Failed to fetch messages
+
+**Note:** 
+- Messages are automatically marked as read when fetched
+- Deleted messages are excluded from results
+- Messages are sorted chronologically (oldest first)
+
+---
+
+### 58. Send Message (REST)
+
+**Method:** `POST`  
+**URL:** `/api/chat/message`  
+**Authentication:** Required
+
+**Description:**  
+Send a message via REST API. **Note:** WebSocket is preferred for real-time messaging. Use this endpoint only when WebSocket is unavailable.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "conversationId": "conversation_id",
+  "text": "Hello!",
+  "media": [
+    {
+      "url": "https://example.com/image.jpg",
+      "type": "image",
+      "filename": "image.jpg",
+      "size": 1024000
+    }
+  ],
+  "messageType": "text",
+  "replyTo": "message_id"
+}
+```
+
+**Fields:**
+- `conversationId` (string, required): ID of the conversation
+- `text` (string, optional): Message text (required if no media)
+- `media` (array, optional): Array of media objects (required if no text)
+- `messageType` (string, optional): "text" | "image" | "video" | "audio" | "file" (default: "text" or inferred from media)
+- `replyTo` (string, optional): ID of message to reply to
+
+**Example Request:**
+```bash
+POST /api/chat/message
+```
+
+**Example using cURL:**
+```bash
+curl -X POST "https://api.sanoraindia.com/api/chat/message" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversationId": "507f1f77bcf86cd799439011",
+    "text": "Hello!",
+    "messageType": "text"
+  }'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "message_id",
+    "conversationId": "conversation_id",
+    "senderId": {
+      "_id": "user_id",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "profileImage": "https://..."
+    },
+    "text": "Hello!",
+    "media": [],
+    "messageType": "text",
+    "status": "sent",
+    "replyTo": null,
+    "createdAt": "2024-01-01T12:00:00.000Z",
+    "updatedAt": "2024-01-01T12:00:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Conversation ID required, message text or media required
+- `401`: Not authenticated
+- `403`: Not authorized to send message
+- `404`: Conversation not found
+- `429`: Too many messages (rate limited - 30 messages per minute)
+- `500`: Failed to send message
+
+**Note:** 
+- Rate limited to 30 messages per minute per user
+- Message is also emitted via WebSocket to all participants
+- At least one of `text` or `media` must be provided
+
+---
+
+### 59. Delete Message
+
+**Method:** `DELETE`  
+**URL:** `/api/chat/message/:messageId`  
+**Authentication:** Required
+
+**Description:**  
+Delete a message. Can delete for yourself only, or for everyone (if you're the sender).
+
+**Path Parameters:**
+- `messageId` (string, required): ID of the message to delete
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "deleteForEveryone": true
+}
+```
+
+**Fields:**
+- `deleteForEveryone` (boolean, optional): If true, deletes for all participants (only sender can do this). If false or omitted, deletes for current user only.
+
+**Example Request:**
+```bash
+DELETE /api/chat/message/507f1f77bcf86cd799439011
+```
+
+**Example using cURL:**
+```bash
+curl -X DELETE "https://api.sanoraindia.com/api/chat/message/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"deleteForEveryone": false}'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Message deleted successfully"
+}
+```
+
+**Error Responses:**
+- `401`: Not authenticated
+- `403`: Not authorized (can't delete for everyone if not sender)
+- `404`: Message not found
+- `500`: Failed to delete message
+
+**Note:** 
+- Only the sender can delete for everyone
+- Any participant can delete for themselves
+- Deleted messages are excluded from message lists
+
+---
+
+### 60. Mark Messages as Read
+
+**Method:** `POST`  
+**URL:** `/api/chat/messages/read`  
+**Authentication:** Required
+
+**Description:**  
+Mark messages as read. If `messageIds` is provided, only those messages are marked. Otherwise, all unread messages in the conversation are marked as read.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "conversationId": "conversation_id",
+  "messageIds": ["message_id_1", "message_id_2"]
+}
+```
+
+**Fields:**
+- `conversationId` (string, required): ID of the conversation
+- `messageIds` (array, optional): Array of specific message IDs to mark as read. If omitted, all unread messages in the conversation are marked.
+
+**Example Request:**
+```bash
+POST /api/chat/messages/read
+```
+
+**Example using cURL:**
+```bash
+curl -X POST "https://api.sanoraindia.com/api/chat/messages/read" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "conversationId": "507f1f77bcf86cd799439011",
+    "messageIds": ["message_id_1", "message_id_2"]
+  }'
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Messages marked as read",
+  "count": 2
+}
+```
+
+**Response Fields:**
+- `count` (number): Number of messages marked as read
+
+**Error Responses:**
+- `400`: Conversation ID required
+- `401`: Not authenticated
+- `403`: Not authorized
+- `404`: Conversation not found
+- `500`: Failed to mark messages as read
+
+**Note:** 
+- Only messages from other users are marked as read (not your own)
+- Read receipts are emitted via WebSocket to notify senders
+
+---
+
+### 61. Get Unread Count
+
+**Method:** `GET`  
+**URL:** `/api/chat/unread-count`  
+**Authentication:** Required
+
+**Description:**  
+Get the total count of unread messages across all conversations for the authenticated user.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/chat/unread-count
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.sanoraindia.com/api/chat/unread-count" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "unreadCount": 5
+  }
+}
+```
+
+**Response Fields:**
+- `unreadCount` (number): Total number of unread messages
+
+**Error Responses:**
+- `401`: Not authenticated
+- `500`: Failed to get unread count
+
+**Note:** 
+- Counts only messages from other users (not your own)
+- Excludes deleted messages
+
+---
+
+### WebSocket Events
+
+#### Client → Server Events
+
+**Connection:**
+```javascript
+const socket = io('http://localhost:3100', {
+  auth: {
+    token: 'YOUR_JWT_ACCESS_TOKEN'
+  }
+});
+```
+
+**Join Conversation:**
+```javascript
+socket.emit('join:conversation', {
+  conversationId: 'conversation_id'
+});
+```
+
+**Leave Conversation:**
+```javascript
+socket.emit('leave:conversation', {
+  conversationId: 'conversation_id'
+});
+```
+
+**Send Message:**
+```javascript
+socket.emit('send:message', {
+  conversationId: 'conversation_id',
+  text: 'Hello!',
+  media: [], // Optional
+  messageType: 'text', // 'text' | 'image' | 'video' | 'audio' | 'file'
+  replyTo: 'message_id' // Optional
+});
+```
+
+**Typing Indicator:**
+```javascript
+// Start typing
+socket.emit('typing:start', {
+  conversationId: 'conversation_id'
+});
+
+// Stop typing
+socket.emit('typing:stop', {
+  conversationId: 'conversation_id'
+});
+```
+
+**Mark Messages as Read:**
+```javascript
+socket.emit('message:read', {
+  messageIds: ['message_id_1', 'message_id_2'],
+  conversationId: 'conversation_id'
+});
+```
+
+#### Server → Client Events
+
+**New Message:**
+```javascript
+socket.on('new:message', (data) => {
+  console.log('New message:', data.message);
+  // data.message contains full message object
+});
+```
+
+**Message Sent (Confirmation):**
+```javascript
+socket.on('message:sent', (data) => {
+  console.log('Message sent:', data.messageId);
+});
+```
+
+**Message Delivered:**
+```javascript
+socket.on('message:delivered', (data) => {
+  console.log('Message delivered:', data.messageId);
+});
+```
+
+**Messages Read:**
+```javascript
+socket.on('messages:read', (data) => {
+  console.log('Messages read:', data.messageIds);
+  console.log('Read by:', data.readBy);
+});
+```
+
+**Typing Indicator:**
+```javascript
+socket.on('typing:start', (data) => {
+  console.log('User typing:', data.userId);
+});
+
+socket.on('typing:stop', (data) => {
+  console.log('User stopped typing:', data.userId);
+});
+```
+
+**User Online/Offline:**
+```javascript
+socket.on('user:online', (data) => {
+  console.log('User online:', data.userId);
+});
+
+socket.on('user:offline', (data) => {
+  console.log('User offline:', data.userId);
+});
+```
+
+**Message Deleted:**
+```javascript
+socket.on('message:deleted', (data) => {
+  console.log('Message deleted:', data.messageId);
+});
+```
+
+**Error:**
+```javascript
+socket.on('error', (data) => {
+  console.error('Socket error:', data.message);
+});
+```
+
+**Note:** 
+- All WebSocket events require authentication via JWT token
+- Users can only join conversations they're participants in
+- Messages are automatically saved to database
+- Status updates: `sent` → `delivered` (if recipient online) → `read` (when viewed)
 
 ---
 

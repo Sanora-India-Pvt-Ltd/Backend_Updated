@@ -10,6 +10,7 @@ if (process.env.MONGODB_URI) {
 }
 
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const connectDB = require('./config/db');
 const passport = require('passport');
@@ -435,6 +436,24 @@ try {
     });
 }
 
+// Chat routes - for real-time messaging
+try {
+    console.log('🔄 Loading chat routes...');
+    app.use('/api/chat', require('./routes/chatRoutes'));
+    console.log('✅ Chat routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading chat routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/chat', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Chat routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');
@@ -788,6 +807,8 @@ app.use((req, res) => {
         hint = 'GET /api/auth/profile requires Authorization header: Authorization: Bearer <accessToken>. Make sure you are authenticated.';
     } else if (req.path.startsWith('/api/auth/')) {
         hint = 'Check the API documentation for the correct HTTP method and endpoint. Common endpoints: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/profile (requires auth)';
+    } else if (req.path.startsWith('/api/chat/')) {
+        hint = 'Chat routes require authentication. Make sure you include Authorization header: Authorization: Bearer <accessToken>. Available endpoints: GET /api/chat/conversations, GET /api/chat/conversation/:participantId (or /api/chat/conversations/:participantId), GET /api/chat/conversation/:conversationId/messages, POST /api/chat/message';
     }
     
     res.status(404).json({
@@ -839,17 +860,31 @@ if (registeredRoutes.length > 0) {
     console.log('📝 Sample routes:', registeredRoutes.slice(0, 5).join(', '));
 }
 
-app.listen(PORT, () => {
+// Create HTTP server for Socket.IO
+const httpServer = http.createServer(app);
+
+// Initialize Socket.IO server (must be awaited to ensure Redis connections are ready)
+const { initSocketServer } = require('./socket/socketServer');
+
+// Start server after Socket.IO is initialized
+(async () => {
+    try {
+        await initSocketServer(httpServer);
+        
+        // Start server
+        httpServer.listen(PORT, () => {
     console.log(`\n🎯 Server running on port ${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📊 Database: sanora`);
     console.log(`🔐 Auth routes: http://localhost:${PORT}/api/auth`);
+    console.log(`💬 Chat WebSocket: ws://localhost:${PORT}`);
     console.log('Environment Variables Check:');
     console.log('GOOGLE_CLIENT_ID (WEB):', process.env.GOOGLE_CLIENT_ID ? 'SET' : 'NOT SET');
     console.log('GOOGLE_ANDROID_CLIENT_ID:', process.env.GOOGLE_ANDROID_CLIENT_ID ? 'SET' : 'NOT SET');
     console.log('GOOGLE_IOS_CLIENT_ID:', process.env.GOOGLE_IOS_CLIENT_ID ? 'SET' : 'NOT SET');
     console.log('GOOGLE_CLIENT_SECRET:', process.env.GOOGLE_CLIENT_SECRET ? 'SET' : 'NOT SET');
     console.log('GOOGLE_CALLBACK_URL:', process.env.GOOGLE_CALLBACK_URL || 'NOT SET');
+    console.log('REDIS_URL:', process.env.REDIS_URL ? 'SET' : 'NOT SET (optional, for scaling)');
     console.log('\n📧 Email Configuration:');
     console.log('EMAIL_HOST:', process.env.EMAIL_HOST || 'NOT SET');
     console.log('EMAIL_PORT:', process.env.EMAIL_PORT || 'NOT SET');
@@ -862,5 +897,14 @@ app.listen(PORT, () => {
     } else {
         console.log('✅ Email configuration looks good!');
     }
-});
+    if (!process.env.REDIS_URL) {
+        console.log('⚠️  WARNING: Redis not configured. WebSocket scaling will be limited.');
+        console.log('   Set REDIS_URL environment variable for multi-server support.');
+    }
+        });
+    } catch (error) {
+        console.error('❌ Failed to initialize Socket.IO server:', error);
+        process.exit(1);
+    }
+})();
 
