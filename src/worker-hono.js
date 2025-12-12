@@ -32,6 +32,7 @@ app.get('/', (c) => {
       signup: 'POST /api/auth/signup',
       login: 'POST /api/auth/login',
       googleAuth: 'GET /api/auth/google',
+      googleAuthMobile: 'POST /api/auth/google/mobile',
       verifyGoogleToken: 'POST /api/auth/verify-google-token',
       sendOTPSignup: 'POST /api/auth/send-otp-signup',
       verifyOTPSignup: 'POST /api/auth/verify-otp-signup'

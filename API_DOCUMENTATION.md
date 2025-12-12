@@ -36,7 +36,9 @@
    - [Upload Post Media](#29-upload-post-media)
    - [Create Post](#30-create-post)
    - [Get All Posts](#31-get-all-posts)
-   - [Get User Posts](#32-get-user-posts)
+   - [Get My Posts](#32-get-my-posts)
+   - [Get User Posts](#33-get-user-posts)
+   - [Delete Post](#34-delete-post)
 7. [Stories Management](#-stories-management)
    - [Upload Story Media](#42-upload-story-media)
    - [Create Story](#43-create-story)
@@ -2561,6 +2563,63 @@ GET /api/posts/user/user_id_123?page=1&limit=10
 - Results are sorted by creation date (newest first)
 - User information, likes, and comments are automatically populated
 - This endpoint is public (no authentication required)
+
+---
+
+### 34. Delete Post
+
+**Method:** `DELETE`  
+**URL:** `/api/posts/:id`  
+**Authentication:** Required
+
+**Description:**  
+Delete a post. Only the post owner can delete their own posts. All associated media files are automatically deleted from Cloudinary when the post is deleted.
+
+**URL Parameters:**
+- `id` (string, required): Post ID (the `_id` field from the post document)
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example using cURL:**
+```bash
+curl -X DELETE https://api.sanoraindia.com/api/posts/post_id_123 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.sanoraindia.com/api/posts/post_id_123', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  }
+});
+
+const result = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Post deleted successfully"
+}
+```
+
+**Error Responses:**
+- `400`: Invalid post ID
+- `401`: Not authenticated
+- `403`: You do not have permission to delete this post (not the owner)
+- `404`: Post not found
+- `500`: Failed to delete post
+
+**Note:** 
+- Only the post owner can delete their own posts
+- All media files associated with the post are automatically deleted from Cloudinary
+- The deletion is permanent and cannot be undone
 
 ---
 

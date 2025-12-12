@@ -395,11 +395,74 @@ const uploadPostMedia = async (req, res) => {
     }
 };
 
+// Delete a post
+const deletePost = async (req, res) => {
+    try {
+        const user = req.user; // From protect middleware
+        const { id } = req.params;
+
+        // Validate post ID
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid post ID'
+            });
+        }
+
+        // Find the post
+        const post = await Post.findById(id);
+
+        if (!post) {
+            return res.status(404).json({
+                success: false,
+                message: 'Post not found'
+            });
+        }
+
+        // Check if the user owns the post
+        if (post.userId.toString() !== user._id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to delete this post'
+            });
+        }
+
+        // Delete media from Cloudinary if any
+        if (post.media && post.media.length > 0) {
+            for (const mediaItem of post.media) {
+                try {
+                    await cloudinary.uploader.destroy(mediaItem.publicId, { invalidate: true });
+                } catch (cloudinaryError) {
+                    console.warn(`Failed to delete media ${mediaItem.publicId} from Cloudinary:`, cloudinaryError.message);
+                    // Continue with deletion even if Cloudinary deletion fails
+                }
+            }
+        }
+
+        // Delete the post from database
+        await Post.findByIdAndDelete(id);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Post deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('Delete post error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to delete post',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     createPost,
     getAllPosts,
     getMyPosts,
     getUserPosts,
-    uploadPostMedia
+    uploadPostMedia,
+    deletePost
 };
 

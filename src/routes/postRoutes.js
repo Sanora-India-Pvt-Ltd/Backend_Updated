@@ -6,7 +6,8 @@ const {
     getAllPosts,
     getMyPosts,
     getUserPosts,
-    uploadPostMedia
+    uploadPostMedia,
+    deletePost
 } = require('../controllers/postController');
 
 const router = express.Router();
@@ -31,6 +32,10 @@ router.get('/me', protect, getMyPosts);
 // GET /api/posts/user/:id?page=1&limit=10
 router.get('/user/:id', getUserPosts);
 
+// Delete a post (only by owner)
+// DELETE /api/posts/:id
+router.delete('/:id', protect, deletePost);
+
 // Debug: Log all registered routes
 console.log('📋 Post routes registered:');
 console.log('  POST   /api/posts/upload-media (protected)');
@@ -38,6 +43,7 @@ console.log('  POST   /api/posts/create (protected)');
 console.log('  GET    /api/posts/all');
 console.log('  GET    /api/posts/me (protected)');
 console.log('  GET    /api/posts/user/:id');
+console.log('  DELETE /api/posts/:id (protected)');
 
 module.exports = router;
 
