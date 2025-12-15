@@ -10,7 +10,9 @@ const {
     updateProfileMedia,
     updatePersonalInfo,
     updateLocationAndDetails,
-    searchUsers
+    searchUsers,
+    removeEducationEntry,
+    removeWorkplaceEntry
 } = require('../controllers/userController');
 const { limitOTPRequests, limitVerifyRequests } = require('../middleware/rateLimiter');
 
@@ -44,6 +46,10 @@ router.post('/alternate-phone/send-otp', limitOTPRequests, sendOTPForAlternatePh
 router.post('/alternate-phone/verify-otp', limitVerifyRequests, verifyOTPAndUpdateAlternatePhone);
 router.delete('/alternate-phone', removeAlternatePhone);
 
+// Remove education and workplace entries
+router.delete('/education/:index', removeEducationEntry);
+router.delete('/workplace/:index', removeWorkplaceEntry);
+
 // Debug: Log all registered routes
 console.log('📋 User routes registered:');
 console.log('  GET    /api/user/search (protected)');
@@ -56,6 +62,8 @@ console.log('  DELETE /api/user/alternate-phone (protected)');
 console.log('  PUT    /api/user/profile/media (protected)');
 console.log('  PUT    /api/user/profile/personal-info (protected)');
 console.log('  PUT    /api/user/profile/location-details (protected)');
+console.log('  DELETE /api/user/education/:index (protected)');
+console.log('  DELETE /api/user/workplace/:index (protected)');
 
 module.exports = router;
 

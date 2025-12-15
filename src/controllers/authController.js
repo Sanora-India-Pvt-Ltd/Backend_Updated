@@ -1093,37 +1093,58 @@ const updateProfile = async (req, res) => {
                 }
 
                 // Ensure company exists in Company collection
-                const companyName = work.company.trim();
-                const normalizedCompanyName = companyName.toLowerCase();
+                // Handle both company name (string) and company ID (ObjectId)
+                let company;
                 
-                let company = await Company.findOne({
-                    $or: [
-                        { name: companyName },
-                        { normalizedName: normalizedCompanyName }
-                    ]
-                });
-
-                // If company doesn't exist, create it
-                if (!company) {
-                    try {
-                        company = await Company.create({
-                            name: companyName,
-                            normalizedName: normalizedCompanyName,
-                            isCustom: true,
-                            createdBy: user._id
+                if (mongoose.Types.ObjectId.isValid(work.company)) {
+                    // If it's a valid ObjectId, find the company by ID
+                    company = await Company.findById(work.company);
+                    if (!company) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Company with ID ${work.company} not found`
                         });
-                        console.log(`✅ Created new company: ${companyName}`);
-                    } catch (error) {
-                        // Handle race condition - company might have been created by another request
-                        if (error.code === 11000) {
-                            company = await Company.findOne({
-                                $or: [
-                                    { name: companyName },
-                                    { normalizedName: normalizedCompanyName }
-                                ]
+                    }
+                } else {
+                    // If it's a string (company name), find or create the company
+                    const companyName = String(work.company).trim();
+                    if (!companyName) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Company name cannot be empty'
+                        });
+                    }
+                    const normalizedCompanyName = companyName.toLowerCase();
+                    
+                    company = await Company.findOne({
+                        $or: [
+                            { name: companyName },
+                            { normalizedName: normalizedCompanyName }
+                        ]
+                    });
+
+                    // If company doesn't exist, create it
+                    if (!company) {
+                        try {
+                            company = await Company.create({
+                                name: companyName,
+                                normalizedName: normalizedCompanyName,
+                                isCustom: true,
+                                createdBy: user._id
                             });
-                        } else {
-                            throw error;
+                            console.log(`✅ Created new company: ${companyName}`);
+                        } catch (error) {
+                            // Handle race condition - company might have been created by another request
+                            if (error.code === 11000) {
+                                company = await Company.findOne({
+                                    $or: [
+                                        { name: companyName },
+                                        { normalizedName: normalizedCompanyName }
+                                    ]
+                                });
+                            } else {
+                                throw error;
+                            }
                         }
                     }
                 }
@@ -1203,7 +1224,7 @@ const updateProfile = async (req, res) => {
                             institution = await Institution.create({
                                 name: institutionName,
                                 normalizedName: normalizedInstitutionName,
-                                type: ['school', 'college', 'university'].includes(institutionType) ? institutionType : 'school',
+                                type: ['school', 'college', 'university', 'others'].includes(institutionType) ? institutionType : 'school',
                                 city: edu.city || '',
                                 country: edu.country || '',
                                 logo: edu.logo || '',
@@ -1228,13 +1249,74 @@ const updateProfile = async (req, res) => {
                     }
                 }
 
+                // Validate startMonth if provided
+                if (edu.startMonth !== undefined) {
+                    const startMonth = parseInt(edu.startMonth);
+                    if (isNaN(startMonth) || startMonth < 1 || startMonth > 12) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid startMonth (must be between 1 and 12)'
+                        });
+                    }
+                }
+
+                // Validate endMonth if provided
+                if (edu.endMonth !== undefined && edu.endMonth !== null) {
+                    const endMonth = parseInt(edu.endMonth);
+                    if (isNaN(endMonth) || endMonth < 1 || endMonth > 12) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid endMonth (must be between 1 and 12)'
+                        });
+                    }
+                }
+
+                // Validate institutionType if provided
+                if (edu.institutionType !== undefined) {
+                    const validTypes = ['school', 'college', 'university', 'others'];
+                    if (!validTypes.includes(edu.institutionType)) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Institution type must be one of: ${validTypes.join(', ')}`
+                        });
+                    }
+                }
+
+                // Validate CGPA if provided
+                if (edu.cgpa !== undefined && edu.cgpa !== null) {
+                    const cgpa = parseFloat(edu.cgpa);
+                    if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid CGPA (must be between 0 and 10)'
+                        });
+                    }
+                }
+
+                // Validate percentage if provided
+                if (edu.percentage !== undefined && edu.percentage !== null) {
+                    const percentage = parseFloat(edu.percentage);
+                    if (isNaN(percentage) || percentage < 0 || percentage > 100) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid percentage (must be between 0 and 100)'
+                        });
+                    }
+                }
+
                 // Process education entry
                 const processedEdu = {
                     institution: institution._id, // Store institution ObjectID reference
+                    description: edu.description ? edu.description.trim() : '',
                     degree: edu.degree || '',
                     field: edu.field || '',
+                    institutionType: edu.institutionType || 'school',
+                    startMonth: edu.startMonth ? parseInt(edu.startMonth) : undefined,
                     startYear: parseInt(edu.startYear),
-                    endYear: edu.endYear ? parseInt(edu.endYear) : null
+                    endMonth: edu.endMonth ? parseInt(edu.endMonth) : null,
+                    endYear: edu.endYear ? parseInt(edu.endYear) : null,
+                    cgpa: edu.cgpa !== undefined && edu.cgpa !== null ? parseFloat(edu.cgpa) : null,
+                    percentage: edu.percentage !== undefined && edu.percentage !== null ? parseFloat(edu.percentage) : null
                 };
                 processedEducation.push(processedEdu);
             }
@@ -1289,10 +1371,16 @@ const updateProfile = async (req, res) => {
                 verified: edu.institution.verified,
                 isCustom: edu.institution.isCustom
             } : null,
+            description: edu.description,
             degree: edu.degree,
             field: edu.field,
+            institutionType: edu.institutionType,
+            startMonth: edu.startMonth,
             startYear: edu.startYear,
-            endYear: edu.endYear
+            endMonth: edu.endMonth,
+            endYear: edu.endYear,
+            cgpa: edu.cgpa,
+            percentage: edu.percentage
         }));
 
         res.status(200).json({

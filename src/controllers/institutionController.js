@@ -24,7 +24,7 @@ const searchInstitutions = async (req, res) => {
         };
 
         // Filter by type if provided
-        if (type && ['school', 'college', 'university'].includes(type)) {
+        if (type && ['school', 'college', 'university', 'others'].includes(type)) {
             searchQuery.type = type;
         }
 
@@ -93,7 +93,7 @@ const createInstitution = async (req, res) => {
 
         const institutionName = name.trim();
         const normalizedName = institutionName.toLowerCase();
-        const institutionType = (type && ['school', 'college', 'university'].includes(type)) 
+        const institutionType = (type && ['school', 'college', 'university', 'others'].includes(type)) 
             ? type 
             : 'school'; // Default to school if invalid type
 

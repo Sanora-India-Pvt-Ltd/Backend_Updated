@@ -21,6 +21,8 @@
    - [Update Profile Media (Bio, Cover Photo, Profile Image)](#171-update-profile-media-bio-cover-photo-profile-image)
    - [Update Personal Information](#172-update-personal-information)
    - [Update Location and Details](#173-update-location-and-details)
+   - [Remove Education Entry](#174-remove-education-entry)
+   - [Remove Workplace Entry](#175-remove-workplace-entry)
    - [Update Phone Number](#18-update-phone-number)
    - [Update Alternate Phone Number](#19-update-alternate-phone-number)
    - [Remove Alternate Phone Number](#20-remove-alternate-phone-number)
@@ -29,11 +31,11 @@
    - [Get User's Images](#24-get-users-images)
    - [Delete User's Media](#25-delete-users-media)
 4. [Company Management](#-company-management)
-   - [Search Companies](#26-search-companies)
-   - [Create Company](#27-create-company)
+   - [Search Companies](#27-search-companies)
+   - [Create Company](#28-create-company)
 5. [Institution Management](#-institution-management)
-   - [Search Institutions](#28-search-institutions)
-   - [Create Institution](#29-create-institution)
+   - [Search Institutions](#29-search-institutions)
+   - [Create Institution](#30-create-institution)
 6. [Posts Management](#-posts-management)
    - [Upload Post Media](#30-upload-post-media)
    - [Create Post](#31-create-post)
@@ -505,10 +507,16 @@ Authorization: Bearer your_access_token_here
             "verified": false,
             "isCustom": true
           },
+          "description": "Completed Bachelor's degree with focus on software engineering",
           "degree": "B.Tech",
           "field": "Computer Science",
+          "institutionType": "college",
+          "startMonth": 8,
           "startYear": 2020,
-          "endYear": 2024
+          "endMonth": 5,
+          "endYear": 2024,
+          "cgpa": 8.5,
+          "percentage": 85.0
         },
         {
           "institution": {
@@ -521,10 +529,16 @@ Authorization: Bearer your_access_token_here
             "verified": false,
             "isCustom": false
           },
+          "description": "Master's degree in Data Science",
           "degree": "Master of Science",
           "field": "Data Science",
+          "institutionType": "university",
+          "startMonth": 9,
           "startYear": 2024,
-          "endYear": null
+          "endMonth": null,
+          "endYear": null,
+          "cgpa": null,
+          "percentage": 88.5
         }
       ],
       "isGoogleOAuth": false,
@@ -734,11 +748,16 @@ Authorization: Bearer your_access_token_here
   "education": [
     {
       "institution": "Delhi Public School",
+      "description": "Completed Bachelor's degree with focus on software engineering",
       "degree": "B.Tech",
       "field": "Computer Science",
+      "institutionType": "college",
+      "startMonth": 8,
       "startYear": 2020,
+      "endMonth": 5,
       "endYear": 2024,
-      "institutionType": "school"
+      "cgpa": 8.5,
+      "percentage": 85.0
     },
     {
       "institution": "University of Technology",
@@ -764,18 +783,23 @@ Authorization: Bearer your_access_token_here
 - `coverPhoto` (string, optional): URL of the cover photo. Must be a valid URL format. Can be set to `null` or empty string to clear.
 - `relationshipStatus` (string, optional): One of: "Single", "In a relationship", "Engaged", "Married", "In a civil partnership", "In a domestic partnership", "In an open relationship", "It's complicated", "Separated", "Divorced", "Widowed". Can be set to `null` or empty string to clear.
 - `workplace` (array, optional): Array of work experiences. Each entry must have:
-  - `company` (string, required): Company name. **Note:** If the company doesn't exist in the system, it will be automatically created when you update your profile. You can also search for companies using the [Search Companies](#25-search-companies) endpoint before updating your profile.
+  - `company` (string, required): Company name. **Note:** If the company doesn't exist in the system, it will be automatically created when you update your profile. You can also search for companies using the [Search Companies](#27-search-companies) endpoint before updating your profile.
   - `position` (string, required): Job position/title
   - `startDate` (string, required): Start date in ISO 8601 format (YYYY-MM-DD)
   - `endDate` (string, optional): End date in ISO 8601 format (YYYY-MM-DD). Set to `null` for current position
   - `isCurrent` (boolean, optional): Whether this is the current job (default: false)
 - `education` (array, optional): Array of education entries. Each entry can have:
-  - `institution` (string or ObjectId, required if entry provided): Institution name or ObjectId. **Note:** If the institution doesn't exist in the system, it will be automatically created when you update your profile. You can also search for institutions using the [Search Institutions](#27-search-institutions) endpoint before updating your profile.
+  - `institution` (string or ObjectId, required if entry provided): Institution name or ObjectId. **Note:** If the institution doesn't exist in the system, it will be automatically created when you update your profile. You can also search for institutions using the [Search Institutions](#29-search-institutions) endpoint before updating your profile.
+  - `description` (string, optional): Description of the education experience
   - `degree` (string, optional): Degree name (e.g., "B.Tech", "Bachelor of Science")
   - `field` (string, optional): Field of study (e.g., "Computer Science", "Engineering")
+  - `institutionType` (string, optional): Type of institution - "school", "college", "university", or "others" (default: "school"). This field is stored with the education entry and can be different from the institution's type.
+  - `startMonth` (number, optional): Start month (1-12, where 1 = January, 12 = December)
   - `startYear` (number, required if entry provided): Start year (must be a valid year between 1900 and current year + 10)
+  - `endMonth` (number, optional): End month (1-12, where 1 = January, 12 = December). Set to `null` for ongoing education
   - `endYear` (number, optional): End year (must be a valid year between 1900 and current year + 10). Set to `null` for ongoing education
-  - `institutionType` (string, optional): Type of institution - "school", "college", or "university" (default: "school"). Only used when creating a new institution.
+  - `cgpa` (number, optional): CGPA score (must be between 0 and 10). Set to `null` if not applicable
+  - `percentage` (number, optional): Percentage score (must be between 0 and 100). Set to `null` if not applicable
   - `city` (string, optional): City where institution is located. Only used when creating a new institution.
   - `country` (string, optional): Country where institution is located. Only used when creating a new institution.
   - `logo` (string, optional): Logo URL for the institution. Only used when creating a new institution.
@@ -785,8 +809,9 @@ Authorization: Bearer your_access_token_here
 - **Multiple Education Entries:** You can provide multiple education entries in the array. Each entry represents a different educational qualification. The system will process all entries and create institutions automatically if they don't exist.
 - **Multiple Workplaces:** You can provide multiple workplace entries in the array. Each entry represents a different work experience. The system will process all entries and create companies automatically if they don't exist.
 - For workplace and education, you can replace the entire array or update individual entries
-- **Institution Auto-Creation:** When you provide an institution name in the `education` array, the system automatically checks if the institution exists. If it doesn't exist, it will be created automatically. You don't need to create institutions separately before updating your profile, though you can use the [Search Institutions](#27-search-institutions) endpoint to find existing institutions first.
-- **Company Auto-Creation:** When you provide a company name in the `workplace` array, the system automatically checks if the company exists. If it doesn't exist, it will be created automatically. You don't need to create companies separately before updating your profile, though you can use the [Search Companies](#25-search-companies) endpoint to find existing companies first.
+- **Removing Individual Entries:** To remove a specific education or workplace entry, use the [Remove Education Entry](#174-remove-education-entry) or [Remove Workplace Entry](#175-remove-workplace-entry) endpoints instead of replacing the entire array.
+- **Institution Auto-Creation:** When you provide an institution name in the `education` array, the system automatically checks if the institution exists. If it doesn't exist, it will be created automatically. You don't need to create institutions separately before updating your profile, though you can use the [Search Institutions](#29-search-institutions) endpoint to find existing institutions first.
+- **Company Auto-Creation:** When you provide a company name in the `workplace` array, the system automatically checks if the company exists. If it doesn't exist, it will be created automatically. You don't need to create companies separately before updating your profile, though you can use the [Search Companies](#27-search-companies) endpoint to find existing companies first.
 - **Education is Optional:** The education field is completely optional. You can provide an empty array `[]` to clear all education, or omit it entirely to leave education unchanged.
 - `relationshipStatus` and `hometown` are optional and can be set to `null` or empty string to clear
 
@@ -848,10 +873,16 @@ Authorization: Bearer your_access_token_here
             "verified": false,
             "isCustom": true
           },
+          "description": "Completed Bachelor's degree with focus on software engineering",
           "degree": "B.Tech",
           "field": "Computer Science",
+          "institutionType": "college",
+          "startMonth": 8,
           "startYear": 2020,
-          "endYear": 2024
+          "endMonth": 5,
+          "endYear": 2024,
+          "cgpa": 8.5,
+          "percentage": 85.0
         },
         {
           "institution": {
@@ -864,10 +895,16 @@ Authorization: Bearer your_access_token_here
             "verified": false,
             "isCustom": false
           },
+          "description": "Master's degree in Data Science",
           "degree": "Master of Science",
           "field": "Data Science",
+          "institutionType": "university",
+          "startMonth": 9,
           "startYear": 2024,
-          "endYear": null
+          "endMonth": null,
+          "endYear": null,
+          "cgpa": null,
+          "percentage": 88.5
         }
       ],
       "createdAt": "2024-01-01T12:00:00.000Z",
@@ -878,7 +915,7 @@ Authorization: Bearer your_access_token_here
 ```
 
 **Error Responses:**
-- `400`: Invalid date of birth (must be valid date, not in future, not more than 150 years ago), invalid gender, empty name fields, invalid cover photo URL, invalid relationship status, invalid workplace structure, invalid education structure, invalid year format (startYear and endYear must be valid years between 1900 and current year + 10)
+- `400`: Invalid date of birth (must be valid date, not in future, not more than 150 years ago), invalid gender, empty name fields, invalid cover photo URL, invalid relationship status, invalid workplace structure, invalid education structure, invalid year format (startYear and endYear must be valid years between 1900 and current year + 10), invalid month format (startMonth and endMonth must be between 1 and 12), invalid institution type (must be one of: school, college, university, others), invalid CGPA (must be between 0 and 10), invalid percentage (must be between 0 and 100)
 - `401`: No token, invalid token, expired token
 
 ---
@@ -1048,11 +1085,16 @@ Content-Type: application/json
   "education": [
     {
       "institution": "Delhi Public School",
+      "description": "Completed Bachelor's degree with focus on software engineering",
       "degree": "B.Tech",
       "field": "Computer Science",
+      "institutionType": "college",
+      "startMonth": 8,
       "startYear": 2020,
+      "endMonth": 5,
       "endYear": 2024,
-      "institutionType": "school"
+      "cgpa": 8.5,
+      "percentage": 85.0
     }
   ]
 }
@@ -1071,11 +1113,16 @@ Content-Type: application/json
   - `isCurrent` (boolean, optional): Whether this is the current job (default: false)
 - `education` (array, optional): Array of education entries. Each entry can have:
   - `institution` (string or ObjectId, required if entry provided): Institution name or ObjectId. **Note:** If the institution doesn't exist in the system, it will be automatically created when you update your profile.
+  - `description` (string, optional): Description of the education experience
   - `degree` (string, optional): Degree name (e.g., "B.Tech", "Bachelor of Science")
   - `field` (string, optional): Field of study (e.g., "Computer Science", "Engineering")
+  - `institutionType` (string, optional): Type of institution - "school", "college", "university", or "others" (default: "school"). This field is stored with the education entry and can be different from the institution's type.
+  - `startMonth` (number, optional): Start month (1-12, where 1 = January, 12 = December)
   - `startYear` (number, required if entry provided): Start year (must be a valid year between 1900 and current year + 10)
+  - `endMonth` (number, optional): End month (1-12, where 1 = January, 12 = December). Set to `null` for ongoing education
   - `endYear` (number, optional): End year (must be a valid year between 1900 and current year + 10). Set to `null` for ongoing education
-  - `institutionType` (string, optional): Type of institution - "school", "college", or "university" (default: "school"). Only used when creating a new institution.
+  - `cgpa` (number, optional): CGPA score (must be between 0 and 10). Set to `null` if not applicable
+  - `percentage` (number, optional): Percentage score (must be between 0 and 100). Set to `null` if not applicable
   - `city` (string, optional): City where institution is located. Only used when creating a new institution.
   - `country` (string, optional): Country where institution is located. Only used when creating a new institution.
   - `logo` (string, optional): Logo URL for the institution. Only used when creating a new institution.
@@ -1087,6 +1134,7 @@ Content-Type: application/json
 - **Institution Auto-Creation:** When you provide an institution name in the `education` array, the system automatically checks if the institution exists. If it doesn't exist, it will be created automatically.
 - **Company Auto-Creation:** When you provide a company name in the `workplace` array, the system automatically checks if the company exists. If it doesn't exist, it will be created automatically.
 - **Education is Optional:** The education field is completely optional. You can provide an empty array `[]` to clear all education, or omit it entirely to leave education unchanged.
+- **Removing Individual Entries:** To remove a specific education or workplace entry, use the [Remove Education Entry](#174-remove-education-entry) or [Remove Workplace Entry](#175-remove-workplace-entry) endpoints instead of replacing the entire array.
 - `relationshipStatus` and `hometown` are optional and can be set to `null` or empty string to clear
 
 **Success Response (200):**
@@ -1126,10 +1174,16 @@ Content-Type: application/json
             "verified": false,
             "isCustom": true
           },
+          "description": "Completed Bachelor's degree with focus on software engineering",
           "degree": "B.Tech",
           "field": "Computer Science",
+          "institutionType": "college",
+          "startMonth": 8,
           "startYear": 2020,
-          "endYear": 2024
+          "endMonth": 5,
+          "endYear": 2024,
+          "cgpa": 8.5,
+          "percentage": 85.0
         }
       ],
       "updatedAt": "2024-01-01T12:45:00.000Z"
@@ -1139,9 +1193,156 @@ Content-Type: application/json
 ```
 
 **Error Responses:**
-- `400`: Invalid relationship status, invalid workplace structure, invalid education structure, invalid year format (startYear and endYear must be valid years between 1900 and current year + 10), no fields provided to update
+- `400`: Invalid relationship status, invalid workplace structure, invalid education structure, invalid year format (startYear and endYear must be valid years between 1900 and current year + 10), invalid month format (startMonth and endMonth must be between 1 and 12), invalid institution type (must be one of: school, college, university, others), invalid CGPA (must be between 0 and 10), invalid percentage (must be between 0 and 100), no fields provided to update
 - `401`: No token, invalid token, expired token
 - `500`: Error updating location and details
+
+---
+
+### 17.4. Remove Education Entry
+
+**Method:** `DELETE`  
+**URL:** `/api/user/education/:index`  
+**Authentication:** Required
+
+**Description:**  
+Remove a specific education entry from your profile by its index (0-based). The index corresponds to the position of the education entry in your education array.
+
+**URL Parameters:**
+- `index` (number, required): The index of the education entry to remove (0-based). For example, `0` for the first entry, `1` for the second entry, etc.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Education entry removed successfully",
+  "data": {
+    "removedEntry": {
+      "description": "Completed Bachelor's degree with focus on software engineering",
+      "degree": "B.Tech",
+      "field": "Computer Science",
+      "institutionType": "college",
+      "startYear": 2020,
+      "endYear": 2024
+    },
+    "education": [
+      {
+        "institution": {
+          "id": "507f1f77bcf86cd799439021",
+          "name": "University of Technology",
+          "type": "university",
+          "city": "Mumbai",
+          "country": "India",
+          "logo": "",
+          "verified": false,
+          "isCustom": false
+        },
+        "description": "Master's degree in Data Science",
+        "degree": "Master of Science",
+        "field": "Data Science",
+        "institutionType": "university",
+        "startMonth": 9,
+        "startYear": 2024,
+        "endMonth": null,
+        "endYear": null,
+        "cgpa": null,
+        "percentage": 88.5
+      }
+    ],
+    "remainingCount": 1
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid education entry index (index must be a non-negative number), no education entries found
+- `401`: No token, invalid token, expired token
+- `404`: Education entry at the specified index not found
+- `500`: Error removing education entry
+
+**Example Request:**
+```bash
+# Remove the first education entry (index 0)
+curl -X DELETE https://api.ulearnandearn.com/api/user/education/0 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Remove the second education entry (index 1)
+curl -X DELETE https://api.ulearnandearn.com/api/user/education/1 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Notes:**
+- The index is 0-based (first entry is at index 0, second at index 1, etc.)
+- After removal, the remaining entries maintain their original order
+- You can check your current education entries by calling the [Get User Profile](#16-get-user-profile) endpoint first to see the indices
+
+---
+
+### 17.5. Remove Workplace Entry
+
+**Method:** `DELETE`  
+**URL:** `/api/user/workplace/:index`  
+**Authentication:** Required
+
+**Description:**  
+Remove a specific workplace entry from your profile by its index (0-based). The index corresponds to the position of the workplace entry in your workplace array.
+
+**URL Parameters:**
+- `index` (number, required): The index of the workplace entry to remove (0-based). For example, `0` for the first entry, `1` for the second entry, etc.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Workplace entry removed successfully",
+  "data": {
+    "removedEntry": {
+      "position": "Senior Software Engineer",
+      "description": "Led development of key features",
+      "startDate": "2020-01-15T00:00:00.000Z",
+      "endDate": null,
+      "isCurrent": true
+    },
+    "workplace": [
+      {
+        "company": {
+          "id": "507f1f77bcf86cd799439022",
+          "name": "Startup Inc",
+          "isCustom": true
+        },
+        "position": "Software Engineer",
+        "description": "Developed web applications",
+        "startDate": "2018-06-01T00:00:00.000Z",
+        "endDate": "2019-12-31T00:00:00.000Z",
+        "isCurrent": false
+      }
+    ],
+    "remainingCount": 1
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid workplace entry index (index must be a non-negative number), no workplace entries found
+- `401`: No token, invalid token, expired token
+- `404`: Workplace entry at the specified index not found
+- `500`: Error removing workplace entry
+
+**Example Request:**
+```bash
+# Remove the first workplace entry (index 0)
+curl -X DELETE https://api.ulearnandearn.com/api/user/workplace/0 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Remove the second workplace entry (index 1)
+curl -X DELETE https://api.ulearnandearn.com/api/user/workplace/1 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Notes:**
+- The index is 0-based (first entry is at index 0, second at index 1, etc.)
+- After removal, the remaining entries maintain their original order
+- You can check your current workplace entries by calling the [Get User Profile](#16-get-user-profile) endpoint first to see the indices
 
 ---
 
@@ -2003,7 +2204,149 @@ const result = await response.json();
 
 ---
 
-### 25. Delete User's Media
+### 25. Get User's Images (Public)
+
+**Method:** `GET`  
+**URL:** `/api/media/user/:id`  
+**Authentication:** Not required
+
+**Description:**  
+Retrieve all image files (excluding videos) uploaded by a specific user. **This is a public endpoint** - anyone can view images posted by any user by providing their user ID. This endpoint is useful for displaying images on a user's profile page. Supports pagination.
+
+**URL Parameters:**
+- `id` (string, required): User ID (the `_id` field from the user document)
+
+**Query Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Number of images per page (default: 20)
+
+**Example Request:**
+```bash
+GET /api/media/user/user_id_123?page=1&limit=20
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.ulearnandearn.com/api/media/user/user_id_123?page=1&limit=20"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.ulearnandearn.com/api/media/user/user_id_123?page=1&limit=20', {
+  method: 'GET'
+});
+
+const result = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "User images retrieved successfully",
+  "data": {
+    "user": {
+      "id": "user_id_123",
+      "name": "John Doe",
+      "email": "user@example.com",
+      "profileImage": "https://..."
+    },
+    "count": 10,
+    "totalImages": 45,
+    "images": [
+      {
+        "id": "media_record_id_1",
+        "url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/image1.jpg",
+        "public_id": "user_uploads/user_id/image1",
+        "format": "jpg",
+        "type": "image",
+        "fileSize": 245678,
+        "originalFilename": "my-image.jpg",
+        "folder": "user_uploads/user_id",
+        "uploadedAt": "2024-01-15T10:30:00.000Z"
+      },
+      {
+        "id": "media_record_id_2",
+        "url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/user_uploads/user_id/image2.png",
+        "public_id": "user_uploads/user_id/image2",
+        "format": "png",
+        "type": "image",
+        "fileSize": 189234,
+        "originalFilename": "my-image2.png",
+        "folder": "user_uploads/user_id",
+        "uploadedAt": "2024-01-14T09:20:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalImages": 45,
+      "hasNextPage": true,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+**Response Fields:**
+- `user` (object): User information (id, name, email, profileImage)
+- `count` (number): Number of images in the current page
+- `totalImages` (number): Total number of images for the user
+- `images` (array): Array of image objects, each containing:
+  - `id` (string): Database record ID
+  - `url` (string): Secure HTTPS URL of the image
+  - `public_id` (string): Cloudinary public ID
+  - `format` (string): File format (e.g., "jpg", "png", "webp")
+  - `type` (string): Resource type - always "image"
+  - `fileSize` (number): File size in bytes
+  - `originalFilename` (string): Original filename when uploaded
+  - `folder` (string): Cloudinary folder path
+  - `uploadedAt` (string): ISO 8601 timestamp of when the file was uploaded
+- `pagination` (object): Pagination information:
+  - `currentPage` (number): Current page number
+  - `totalPages` (number): Total number of pages
+  - `totalImages` (number): Total number of images
+  - `hasNextPage` (boolean): Whether there is a next page
+  - `hasPrevPage` (boolean): Whether there is a previous page
+
+**Error Responses:**
+
+**400 - Invalid User ID:**
+```json
+{
+  "success": false,
+  "message": "Invalid user ID"
+}
+```
+
+**404 - User Not Found:**
+```json
+{
+  "success": false,
+  "message": "User not found"
+}
+```
+
+**500 - Retrieval Failed:**
+```json
+{
+  "success": false,
+  "message": "Failed to retrieve user images",
+  "error": "Error details (in development mode)"
+}
+```
+
+**Notes:**
+- **Public Endpoint:** No authentication required - anyone can view any user's images
+- **Profile Viewing:** Perfect for displaying images on a user's public profile page
+- **Images Only:** This endpoint filters out videos and only returns images (resource_type: 'image')
+- **Sorted by Date:** Results are sorted by creation date (newest first)
+- **Pagination:** Supports pagination with `page` and `limit` query parameters
+- **User Information:** Includes basic user information in the response
+
+---
+
+### 26. Delete User's Media
 
 **Method:** `DELETE`  
 **URL:** `/api/media/:mediaId`  
@@ -2092,7 +2435,7 @@ const result = await response.json();
 
 ## 🏢 Company Management
 
-### 26. Search Companies
+### 27. Search Companies
 
 **Method:** `GET`  
 **URL:** `/api/company/search`  
@@ -2162,7 +2505,7 @@ GET /api/company/search?query=BlueSky Innovations
 
 ---
 
-### 27. Create Company
+### 28. Create Company
 
 **Method:** `POST`  
 **URL:** `/api/company`  
@@ -2249,7 +2592,7 @@ Content-Type: application/json
 
 ## 🎓 Institution Management
 
-### 28. Search Institutions
+### 29. Search Institutions
 
 **Method:** `GET`  
 **URL:** `/api/institution/search`  
@@ -2332,7 +2675,7 @@ GET /api/institution/search?query=MIT&type=university
 
 ---
 
-### 29. Create Institution
+### 30. Create Institution
 
 **Method:** `POST`  
 **URL:** `/api/institution`  
@@ -2443,7 +2786,7 @@ Content-Type: application/json
 
 ## 📝 Posts Management
 
-### 30. Upload Post Media
+### 31. Upload Post Media
 
 **Method:** `POST`  
 **URL:** `/api/posts/upload-media`  
@@ -2520,7 +2863,7 @@ const result = await response.json();
 
 ---
 
-### 31. Create Post
+### 32. Create Post
 
 **Method:** `POST`  
 **URL:** `/api/posts/create`  
@@ -2627,7 +2970,7 @@ Content-Type: application/json
 
 ---
 
-### 32. Get All Posts
+### 33. Get All Posts
 
 **Method:** `GET`  
 **URL:** `/api/posts/all`  
@@ -2710,7 +3053,7 @@ GET /api/posts/all?page=1&limit=10
 
 ---
 
-### 33. Get My Posts
+### 34. Get My Posts
 
 **Method:** `GET`  
 **URL:** `/api/posts/me`  
@@ -2786,7 +3129,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 34. Get User Posts
+### 35. Get User Posts
 
 **Method:** `GET`  
 **URL:** `/api/posts/user/:id`  
@@ -2864,7 +3207,7 @@ GET /api/posts/user/user_id_123?page=1&limit=10
 
 ---
 
-### 35. Delete Post
+### 36. Delete Post
 
 **Method:** `DELETE`  
 **URL:** `/api/posts/:id`  
@@ -2925,7 +3268,7 @@ const result = await response.json();
 
 Stories are temporary posts that automatically expire after 24 hours. Stories can contain images or videos and are grouped by user, similar to Instagram/Facebook stories.
 
-### 42. Upload Story Media
+### 37. Upload Story Media
 
 **Method:** `POST`  
 **URL:** `/api/stories/upload-media`  
@@ -3000,7 +3343,7 @@ const result = await response.json();
 
 ---
 
-### 43. Create Story
+### 38. Create Story
 
 **Method:** `POST`  
 **URL:** `/api/stories/create`  
@@ -3074,7 +3417,7 @@ Content-Type: application/json
 
 ---
 
-### 44. Get User Stories
+### 39. Get User Stories
 
 **Method:** `GET`  
 **URL:** `/api/stories/user/:id`  
@@ -3148,7 +3491,7 @@ GET /api/stories/user/user_id_123
 
 ---
 
-### 45. Get All Friends Stories
+### 40. Get All Friends Stories
 
 **Method:** `GET`  
 **URL:** `/api/stories/all`  
@@ -3523,7 +3866,7 @@ const result = await response.json();
 
 ## 👥 Friend Management
 
-### 46. Send Friend Request
+### 41. Send Friend Request
 
 **Method:** `POST`  
 **URL:** `/api/friend/send/:receiverId`  
@@ -3583,7 +3926,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 47. Accept Friend Request
+### 42. Accept Friend Request
 
 **Method:** `POST`  
 **URL:** `/api/friend/accept/:requestId`  
@@ -3644,7 +3987,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 48. Reject Friend Request
+### 43. Reject Friend Request
 
 **Method:** `POST`  
 **URL:** `/api/friend/reject/:requestId`  
@@ -3704,7 +4047,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 49. List Friends
+### 44. List Friends
 
 **Method:** `GET`  
 **URL:** `/api/friend/list`  
@@ -3764,7 +4107,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 50. List Received Friend Requests
+### 45. List Received Friend Requests
 
 **Method:** `GET`  
 **URL:** `/api/friend/requests/received`  
@@ -3820,7 +4163,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 51. List Sent Friend Requests
+### 46. List Sent Friend Requests
 
 **Method:** `GET`  
 **URL:** `/api/friend/requests/sent`  
@@ -3876,7 +4219,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 54. Get Friend Suggestions
+### 49. Get Friend Suggestions
 
 **Method:** `GET`  
 **URL:** `/api/friend/suggestions`  
@@ -4016,7 +4359,7 @@ If you have no friends, the API returns random user suggestions:
 
 ---
 
-### 52. Unfriend User
+### 47. Unfriend User
 
 **Method:** `DELETE`  
 **URL:** `/api/friend/unfriend/:friendId`  
@@ -4053,7 +4396,7 @@ Authorization: Bearer <your_access_token>
 
 ---
 
-### 53. Cancel Sent Friend Request
+### 48. Cancel Sent Friend Request
 
 **Method:** `DELETE`  
 **URL:** `/api/friend/cancel/:requestId`  
@@ -4129,7 +4472,7 @@ const socket = io('http://localhost:3100', {
 
 ---
 
-### 55. Get All Conversations
+### 50. Get All Conversations
 
 **Method:** `GET`  
 **URL:** `/api/chat/conversations`  
@@ -4218,7 +4561,7 @@ curl -X GET "https://api.ulearnandearn.com/api/chat/conversations" \
 
 ---
 
-### 56. Get or Create Conversation
+### 51. Get or Create Conversation
 
 **Method:** `GET`  
 **URL:** `/api/chat/conversation/:participantId`  
@@ -4294,7 +4637,7 @@ curl -X GET "https://api.ulearnandearn.com/api/chat/conversation/507f1f77bcf86cd
 
 ---
 
-### 57. Get Messages
+### 52. Get Messages
 
 **Method:** `GET`  
 **URL:** `/api/chat/conversation/:conversationId/messages`  
@@ -4409,7 +4752,7 @@ curl -X GET "https://api.ulearnandearn.com/api/chat/conversation/507f1f77bcf86cd
 
 ---
 
-### 58. Send Message (REST)
+### 53. Send Message (REST)
 
 **Method:** `POST`  
 **URL:** `/api/chat/message`  
@@ -4509,7 +4852,7 @@ curl -X POST "https://api.ulearnandearn.com/api/chat/message" \
 
 ---
 
-### 59. Delete Message
+### 54. Delete Message
 
 **Method:** `DELETE`  
 **URL:** `/api/chat/message/:messageId`  

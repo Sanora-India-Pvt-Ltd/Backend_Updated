@@ -165,37 +165,58 @@ const updateProfile = async (req, res) => {
                 }
 
                 // Ensure company exists in Company collection
-                const companyName = work.company.trim();
-                const normalizedCompanyName = companyName.toLowerCase();
+                // Handle both company name (string) and company ID (ObjectId)
+                let company;
                 
-                let company = await Company.findOne({
-                    $or: [
-                        { name: companyName },
-                        { normalizedName: normalizedCompanyName }
-                    ]
-                });
-
-                // If company doesn't exist, create it
-                if (!company) {
-                    try {
-                        company = await Company.create({
-                            name: companyName,
-                            normalizedName: normalizedCompanyName,
-                            isCustom: true,
-                            createdBy: user._id
+                if (mongoose.Types.ObjectId.isValid(work.company)) {
+                    // If it's a valid ObjectId, find the company by ID
+                    company = await Company.findById(work.company);
+                    if (!company) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Company with ID ${work.company} not found`
                         });
-                        console.log(`✅ Created new company: ${companyName}`);
-                    } catch (error) {
-                        // Handle race condition - company might have been created by another request
-                        if (error.code === 11000) {
-                            company = await Company.findOne({
-                                $or: [
-                                    { name: companyName },
-                                    { normalizedName: normalizedCompanyName }
-                                ]
+                    }
+                } else {
+                    // If it's a string (company name), find or create the company
+                    const companyName = String(work.company).trim();
+                    if (!companyName) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Company name cannot be empty'
+                        });
+                    }
+                    const normalizedCompanyName = companyName.toLowerCase();
+                    
+                    company = await Company.findOne({
+                        $or: [
+                            { name: companyName },
+                            { normalizedName: normalizedCompanyName }
+                        ]
+                    });
+
+                    // If company doesn't exist, create it
+                    if (!company) {
+                        try {
+                            company = await Company.create({
+                                name: companyName,
+                                normalizedName: normalizedCompanyName,
+                                isCustom: true,
+                                createdBy: user._id
                             });
-                        } else {
-                            throw error;
+                            console.log(`✅ Created new company: ${companyName}`);
+                        } catch (error) {
+                            // Handle race condition - company might have been created by another request
+                            if (error.code === 11000) {
+                                company = await Company.findOne({
+                                    $or: [
+                                        { name: companyName },
+                                        { normalizedName: normalizedCompanyName }
+                                    ]
+                                });
+                            } else {
+                                throw error;
+                            }
                         }
                     }
                 }
@@ -275,7 +296,7 @@ const updateProfile = async (req, res) => {
                             institution = await Institution.create({
                                 name: institutionName,
                                 normalizedName: normalizedInstitutionName,
-                                type: ['school', 'college', 'university'].includes(institutionType) ? institutionType : 'school',
+                                type: ['school', 'college', 'university', 'others'].includes(institutionType) ? institutionType : 'school',
                                 city: edu.city || '',
                                 country: edu.country || '',
                                 logo: edu.logo || '',
@@ -300,13 +321,74 @@ const updateProfile = async (req, res) => {
                     }
                 }
 
+                // Validate startMonth if provided
+                if (edu.startMonth !== undefined) {
+                    const startMonth = parseInt(edu.startMonth);
+                    if (isNaN(startMonth) || startMonth < 1 || startMonth > 12) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid startMonth (must be between 1 and 12)'
+                        });
+                    }
+                }
+
+                // Validate endMonth if provided
+                if (edu.endMonth !== undefined && edu.endMonth !== null) {
+                    const endMonth = parseInt(edu.endMonth);
+                    if (isNaN(endMonth) || endMonth < 1 || endMonth > 12) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid endMonth (must be between 1 and 12)'
+                        });
+                    }
+                }
+
+                // Validate institutionType if provided
+                if (edu.institutionType !== undefined) {
+                    const validTypes = ['school', 'college', 'university', 'others'];
+                    if (!validTypes.includes(edu.institutionType)) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Institution type must be one of: ${validTypes.join(', ')}`
+                        });
+                    }
+                }
+
+                // Validate CGPA if provided
+                if (edu.cgpa !== undefined && edu.cgpa !== null) {
+                    const cgpa = parseFloat(edu.cgpa);
+                    if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid CGPA (must be between 0 and 10)'
+                        });
+                    }
+                }
+
+                // Validate percentage if provided
+                if (edu.percentage !== undefined && edu.percentage !== null) {
+                    const percentage = parseFloat(edu.percentage);
+                    if (isNaN(percentage) || percentage < 0 || percentage > 100) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid percentage (must be between 0 and 100)'
+                        });
+                    }
+                }
+
                 // Process education entry
                 const processedEdu = {
                     institution: institution._id, // Store institution ObjectID reference
+                    description: edu.description ? edu.description.trim() : '',
                     degree: edu.degree || '',
                     field: edu.field || '',
+                    institutionType: edu.institutionType || 'school',
+                    startMonth: edu.startMonth ? parseInt(edu.startMonth) : undefined,
                     startYear: parseInt(edu.startYear),
-                    endYear: edu.endYear ? parseInt(edu.endYear) : null
+                    endMonth: edu.endMonth ? parseInt(edu.endMonth) : null,
+                    endYear: edu.endYear ? parseInt(edu.endYear) : null,
+                    cgpa: edu.cgpa !== undefined && edu.cgpa !== null ? parseFloat(edu.cgpa) : null,
+                    percentage: edu.percentage !== undefined && edu.percentage !== null ? parseFloat(edu.percentage) : null
                 };
                 processedEducation.push(processedEdu);
             }
@@ -356,10 +438,16 @@ const updateProfile = async (req, res) => {
                 verified: edu.institution.verified,
                 isCustom: edu.institution.isCustom
             } : null,
+            description: edu.description,
             degree: edu.degree,
             field: edu.field,
+            institutionType: edu.institutionType,
+            startMonth: edu.startMonth,
             startYear: edu.startYear,
-            endYear: edu.endYear
+            endMonth: edu.endMonth,
+            endYear: edu.endYear,
+            cgpa: edu.cgpa,
+            percentage: edu.percentage
         }));
 
         res.status(200).json({
@@ -1219,6 +1307,90 @@ const getUserImages = async (req, res) => {
     }
 };
 
+// Get user's images by user ID - public endpoint (anyone can view)
+const getUserImagesPublic = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        // Validate user ID
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user ID'
+            });
+        }
+
+        // Check if user exists
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Query only images belonging to this specific user
+        const images = await Media.find({ 
+            userId: id,
+            resource_type: 'image' // Filter only images
+        })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .select('-__v');
+
+        // Get total count for pagination
+        const totalImages = await Media.countDocuments({ 
+            userId: id,
+            resource_type: 'image' 
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "User images retrieved successfully",
+            data: {
+                user: {
+                    id: user._id.toString(),
+                    name: user.name,
+                    email: user.email,
+                    profileImage: user.profileImage
+                },
+                count: images.length,
+                totalImages: totalImages,
+                images: images.map(item => ({
+                    id: item._id,
+                    url: item.url,
+                    public_id: item.public_id,
+                    format: item.format,
+                    type: item.resource_type,
+                    fileSize: item.fileSize,
+                    originalFilename: item.originalFilename,
+                    folder: item.folder,
+                    uploadedAt: item.createdAt
+                })),
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(totalImages / limit),
+                    totalImages: totalImages,
+                    hasNextPage: page < Math.ceil(totalImages / limit),
+                    hasPrevPage: page > 1
+                }
+            }
+        });
+
+    } catch (err) {
+        console.error('Get user images public error:', err);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to retrieve user images",
+            error: err.message
+        });
+    }
+};
+
 // Delete user's media - ensures users can only delete their own uploads
 const deleteUserMedia = async (req, res) => {
     try {
@@ -1667,37 +1839,58 @@ const updateLocationAndDetails = async (req, res) => {
                 }
 
                 // Ensure company exists in Company collection
-                const companyName = work.company.trim();
-                const normalizedCompanyName = companyName.toLowerCase();
+                // Handle both company name (string) and company ID (ObjectId)
+                let company;
                 
-                let company = await Company.findOne({
-                    $or: [
-                        { name: companyName },
-                        { normalizedName: normalizedCompanyName }
-                    ]
-                });
-
-                // If company doesn't exist, create it
-                if (!company) {
-                    try {
-                        company = await Company.create({
-                            name: companyName,
-                            normalizedName: normalizedCompanyName,
-                            isCustom: true,
-                            createdBy: user._id
+                if (mongoose.Types.ObjectId.isValid(work.company)) {
+                    // If it's a valid ObjectId, find the company by ID
+                    company = await Company.findById(work.company);
+                    if (!company) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Company with ID ${work.company} not found`
                         });
-                        console.log(`✅ Created new company: ${companyName}`);
-                    } catch (error) {
-                        // Handle race condition - company might have been created by another request
-                        if (error.code === 11000) {
-                            company = await Company.findOne({
-                                $or: [
-                                    { name: companyName },
-                                    { normalizedName: normalizedCompanyName }
-                                ]
+                    }
+                } else {
+                    // If it's a string (company name), find or create the company
+                    const companyName = String(work.company).trim();
+                    if (!companyName) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Company name cannot be empty'
+                        });
+                    }
+                    const normalizedCompanyName = companyName.toLowerCase();
+                    
+                    company = await Company.findOne({
+                        $or: [
+                            { name: companyName },
+                            { normalizedName: normalizedCompanyName }
+                        ]
+                    });
+
+                    // If company doesn't exist, create it
+                    if (!company) {
+                        try {
+                            company = await Company.create({
+                                name: companyName,
+                                normalizedName: normalizedCompanyName,
+                                isCustom: true,
+                                createdBy: user._id
                             });
-                        } else {
-                            throw error;
+                            console.log(`✅ Created new company: ${companyName}`);
+                        } catch (error) {
+                            // Handle race condition - company might have been created by another request
+                            if (error.code === 11000) {
+                                company = await Company.findOne({
+                                    $or: [
+                                        { name: companyName },
+                                        { normalizedName: normalizedCompanyName }
+                                    ]
+                                });
+                            } else {
+                                throw error;
+                            }
                         }
                     }
                 }
@@ -1777,7 +1970,7 @@ const updateLocationAndDetails = async (req, res) => {
                             institution = await Institution.create({
                                 name: institutionName,
                                 normalizedName: normalizedInstitutionName,
-                                type: ['school', 'college', 'university'].includes(institutionType) ? institutionType : 'school',
+                                type: ['school', 'college', 'university', 'others'].includes(institutionType) ? institutionType : 'school',
                                 city: edu.city || '',
                                 country: edu.country || '',
                                 logo: edu.logo || '',
@@ -1802,13 +1995,74 @@ const updateLocationAndDetails = async (req, res) => {
                     }
                 }
 
+                // Validate startMonth if provided
+                if (edu.startMonth !== undefined) {
+                    const startMonth = parseInt(edu.startMonth);
+                    if (isNaN(startMonth) || startMonth < 1 || startMonth > 12) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid startMonth (must be between 1 and 12)'
+                        });
+                    }
+                }
+
+                // Validate endMonth if provided
+                if (edu.endMonth !== undefined && edu.endMonth !== null) {
+                    const endMonth = parseInt(edu.endMonth);
+                    if (isNaN(endMonth) || endMonth < 1 || endMonth > 12) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid endMonth (must be between 1 and 12)'
+                        });
+                    }
+                }
+
+                // Validate institutionType if provided
+                if (edu.institutionType !== undefined) {
+                    const validTypes = ['school', 'college', 'university', 'others'];
+                    if (!validTypes.includes(edu.institutionType)) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Institution type must be one of: ${validTypes.join(', ')}`
+                        });
+                    }
+                }
+
+                // Validate CGPA if provided
+                if (edu.cgpa !== undefined && edu.cgpa !== null) {
+                    const cgpa = parseFloat(edu.cgpa);
+                    if (isNaN(cgpa) || cgpa < 0 || cgpa > 10) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid CGPA (must be between 0 and 10)'
+                        });
+                    }
+                }
+
+                // Validate percentage if provided
+                if (edu.percentage !== undefined && edu.percentage !== null) {
+                    const percentage = parseFloat(edu.percentage);
+                    if (isNaN(percentage) || percentage < 0 || percentage > 100) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Invalid percentage (must be between 0 and 100)'
+                        });
+                    }
+                }
+
                 // Process education entry
                 const processedEdu = {
                     institution: institution._id, // Store institution ObjectID reference
+                    description: edu.description ? edu.description.trim() : '',
                     degree: edu.degree || '',
                     field: edu.field || '',
+                    institutionType: edu.institutionType || 'school',
+                    startMonth: edu.startMonth ? parseInt(edu.startMonth) : undefined,
                     startYear: parseInt(edu.startYear),
-                    endYear: edu.endYear ? parseInt(edu.endYear) : null
+                    endMonth: edu.endMonth ? parseInt(edu.endMonth) : null,
+                    endYear: edu.endYear ? parseInt(edu.endYear) : null,
+                    cgpa: edu.cgpa !== undefined && edu.cgpa !== null ? parseFloat(edu.cgpa) : null,
+                    percentage: edu.percentage !== undefined && edu.percentage !== null ? parseFloat(edu.percentage) : null
                 };
                 processedEducation.push(processedEdu);
             }
@@ -1858,10 +2112,16 @@ const updateLocationAndDetails = async (req, res) => {
                 verified: edu.institution.verified,
                 isCustom: edu.institution.isCustom
             } : null,
+            description: edu.description,
             degree: edu.degree,
             field: edu.field,
+            institutionType: edu.institutionType,
+            startMonth: edu.startMonth,
             startYear: edu.startYear,
-            endYear: edu.endYear
+            endMonth: edu.endMonth,
+            endYear: edu.endYear,
+            cgpa: edu.cgpa,
+            percentage: edu.percentage
         }));
 
         res.status(200).json({
@@ -1984,6 +2244,215 @@ const searchUsers = async (req, res) => {
     }
 };
 
+// Remove education entry by index
+const removeEducationEntry = async (req, res) => {
+    try {
+        const user = req.user; // From protect middleware
+        const { index } = req.params;
+
+        // Validate index
+        const entryIndex = parseInt(index);
+        if (isNaN(entryIndex) || entryIndex < 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid education entry index. Index must be a non-negative number.'
+            });
+        }
+
+        // Check if education array exists and has the entry
+        if (!user.education || !Array.isArray(user.education)) {
+            return res.status(400).json({
+                success: false,
+                message: 'No education entries found'
+            });
+        }
+
+        if (entryIndex >= user.education.length) {
+            return res.status(404).json({
+                success: false,
+                message: `Education entry at index ${entryIndex} not found. You have ${user.education.length} education entries.`
+            });
+        }
+
+        // Get the education entry to be removed (for response)
+        const educationToRemove = user.education[entryIndex];
+
+        // Remove the education entry using $pull with the entry's _id
+        // Since subdocuments have _id by default in Mongoose, we can use it for removal
+        const educationId = user.education[entryIndex]._id;
+        
+        if (!educationId) {
+            // Fallback: if _id doesn't exist, use array filtering
+            // This shouldn't happen, but adding as a safety measure
+            const updatedEducation = user.education.filter((_, idx) => idx !== entryIndex);
+            await User.findByIdAndUpdate(
+                user._id,
+                { education: updatedEducation },
+                { new: true, runValidators: true }
+            );
+        } else {
+            await User.findByIdAndUpdate(
+                user._id,
+                { $pull: { education: { _id: educationId } } },
+                { new: true, runValidators: true }
+            );
+        }
+
+        // Get updated user with populated fields
+        const updatedUser = await User.findById(user._id)
+            .populate('education.institution', 'name type city country logo verified isCustom')
+            .select('-password -refreshToken');
+
+        // Format education to include institution details
+        const formattedEducation = (updatedUser.education || []).map(edu => ({
+            institution: edu.institution ? {
+                id: edu.institution._id,
+                name: edu.institution.name,
+                type: edu.institution.type,
+                city: edu.institution.city,
+                country: edu.institution.country,
+                logo: edu.institution.logo,
+                verified: edu.institution.verified,
+                isCustom: edu.institution.isCustom
+            } : null,
+            description: edu.description,
+            degree: edu.degree,
+            field: edu.field,
+            institutionType: edu.institutionType,
+            startMonth: edu.startMonth,
+            startYear: edu.startYear,
+            endMonth: edu.endMonth,
+            endYear: edu.endYear,
+            cgpa: edu.cgpa,
+            percentage: edu.percentage
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Education entry removed successfully',
+            data: {
+                removedEntry: {
+                    description: educationToRemove.description,
+                    degree: educationToRemove.degree,
+                    field: educationToRemove.field,
+                    institutionType: educationToRemove.institutionType,
+                    startYear: educationToRemove.startYear,
+                    endYear: educationToRemove.endYear
+                },
+                education: formattedEducation,
+                remainingCount: formattedEducation.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Remove education entry error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error removing education entry',
+            error: error.message
+        });
+    }
+};
+
+// Remove workplace entry by index
+const removeWorkplaceEntry = async (req, res) => {
+    try {
+        const user = req.user; // From protect middleware
+        const { index } = req.params;
+
+        // Validate index
+        const entryIndex = parseInt(index);
+        if (isNaN(entryIndex) || entryIndex < 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid workplace entry index. Index must be a non-negative number.'
+            });
+        }
+
+        // Check if workplace array exists and has the entry
+        if (!user.workplace || !Array.isArray(user.workplace)) {
+            return res.status(400).json({
+                success: false,
+                message: 'No workplace entries found'
+            });
+        }
+
+        if (entryIndex >= user.workplace.length) {
+            return res.status(404).json({
+                success: false,
+                message: `Workplace entry at index ${entryIndex} not found. You have ${user.workplace.length} workplace entries.`
+            });
+        }
+
+        // Get the workplace entry to be removed (for response)
+        const workplaceToRemove = user.workplace[entryIndex];
+
+        // Remove the workplace entry using $pull with the entry's _id
+        // Since subdocuments have _id by default in Mongoose, we can use it for removal
+        const workplaceId = user.workplace[entryIndex]._id;
+        
+        if (!workplaceId) {
+            // Fallback: if _id doesn't exist, use array filtering
+            // This shouldn't happen, but adding as a safety measure
+            const updatedWorkplace = user.workplace.filter((_, idx) => idx !== entryIndex);
+            await User.findByIdAndUpdate(
+                user._id,
+                { workplace: updatedWorkplace },
+                { new: true, runValidators: true }
+            );
+        } else {
+            await User.findByIdAndUpdate(
+                user._id,
+                { $pull: { workplace: { _id: workplaceId } } },
+                { new: true, runValidators: true }
+            );
+        }
+
+        // Get updated user with populated fields
+        const updatedUser = await User.findById(user._id)
+            .populate('workplace.company', 'name isCustom')
+            .select('-password -refreshToken');
+
+        // Format workplace to include company name
+        const formattedWorkplace = updatedUser.workplace.map(work => ({
+            company: work.company ? {
+                id: work.company._id,
+                name: work.company.name,
+                isCustom: work.company.isCustom
+            } : null,
+            position: work.position,
+            description: work.description,
+            startDate: work.startDate,
+            endDate: work.endDate,
+            isCurrent: work.isCurrent
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: 'Workplace entry removed successfully',
+            data: {
+                removedEntry: {
+                    position: workplaceToRemove.position,
+                    description: workplaceToRemove.description,
+                    startDate: workplaceToRemove.startDate,
+                    endDate: workplaceToRemove.endDate,
+                    isCurrent: workplaceToRemove.isCurrent
+                },
+                workplace: formattedWorkplace,
+                remainingCount: formattedWorkplace.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Remove workplace entry error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error removing workplace entry',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     updateProfile,
     sendOTPForPhoneUpdate,
@@ -1996,10 +2465,13 @@ module.exports = {
     uploadCoverPhoto,
     getUserMedia,
     getUserImages,
+    getUserImagesPublic,
     deleteUserMedia,
     updateProfileMedia,
     updatePersonalInfo,
     updateLocationAndDetails,
-    searchUsers
+    searchUsers,
+    removeEducationEntry,
+    removeWorkplaceEntry
 };
 

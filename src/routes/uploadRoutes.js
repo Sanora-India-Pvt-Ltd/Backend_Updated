@@ -6,7 +6,8 @@ const {
     uploadProfileImage,
     uploadCoverPhoto, 
     getUserMedia,
-    getUserImages, 
+    getUserImages,
+    getUserImagesPublic, 
     deleteUserMedia 
 } = require("../controllers/userController");
 
@@ -26,6 +27,9 @@ router.get("/my-media", protect, getUserMedia);
 
 // Get user's images only - ensures users can only see their own uploads
 router.get("/my-images", protect, getUserImages);
+
+// Get user's images by user ID - public endpoint (anyone can view)
+router.get("/user/:id", getUserImagesPublic);
 
 // Delete user's media - ensures users can only delete their own uploads
 router.delete("/:mediaId", protect, deleteUserMedia);

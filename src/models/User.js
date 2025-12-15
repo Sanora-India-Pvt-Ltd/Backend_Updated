@@ -113,6 +113,11 @@ const userSchema = new mongoose.Schema({
             ref: 'Institution',
             required: false
         },
+        description: {
+            type: String,
+            trim: true,
+            default: ''
+        },
         degree: {
             type: String,
             default: ''
@@ -121,12 +126,41 @@ const userSchema = new mongoose.Schema({
             type: String,
             default: ''
         },
+        institutionType: {
+            type: String,
+            enum: ['school', 'college', 'university', 'others'],
+            default: 'school'
+        },
+        startMonth: {
+            type: Number,
+            min: 1,
+            max: 12,
+            required: false
+        },
         startYear: {
             type: Number,
             required: false
         },
+        endMonth: {
+            type: Number,
+            min: 1,
+            max: 12,
+            default: null
+        },
         endYear: {
             type: Number,
+            default: null
+        },
+        cgpa: {
+            type: Number,
+            min: 0,
+            max: 10,
+            default: null
+        },
+        percentage: {
+            type: Number,
+            min: 0,
+            max: 100,
             default: null
         }
     }],
