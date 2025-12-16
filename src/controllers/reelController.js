@@ -294,9 +294,15 @@ const getReels = async (req, res) => {
         // Get user ID from token if authenticated (optional for feed)
         const userId = req.user?._id;
 
-        // Build query to exclude reported reels if user is authenticated
+        // Build query to exclude reported reels and blocked users' reels if user is authenticated
         let query = { contentType, visibility: 'public' };
+        let blockedUserIds = [];
+        
         if (userId) {
+            // Get current user's blocked users
+            const currentUser = await User.findById(userId).select('blockedUsers');
+            blockedUserIds = currentUser.blockedUsers || [];
+
             // Get all reel IDs that the user has reported
             const reportedReelIds = await Report.find({
                 userId: userId,
@@ -304,8 +310,23 @@ const getReels = async (req, res) => {
             }).distinct('contentId');
 
             // Exclude reported reels from feed
-            if (reportedReelIds.length > 0) {
-                query._id = { $nin: reportedReelIds };
+            const excludeIds = [...reportedReelIds];
+            if (blockedUserIds.length > 0) {
+                // Also exclude reels from users who have blocked the current user
+                const usersWhoBlockedMe = await User.find({
+                    blockedUsers: userId
+                }).select('_id').lean();
+                const blockedByUserIds = usersWhoBlockedMe.map(u => u._id);
+                excludeIds.push(...blockedByUserIds);
+            }
+
+            if (excludeIds.length > 0) {
+                query._id = { $nin: excludeIds };
+            }
+
+            // Exclude reels from blocked users
+            if (blockedUserIds.length > 0) {
+                query.userId = { $nin: blockedUserIds };
             }
         }
 
@@ -399,6 +420,28 @@ const getUserReels = async (req, res) => {
 
         // Get user ID from token if authenticated (optional)
         const viewingUserId = req.user?._id;
+
+        // Check if viewing user is blocked by the reel owner or vice versa
+        if (viewingUserId) {
+            const viewingUser = await User.findById(viewingUserId).select('blockedUsers');
+            const reelOwner = await User.findById(id).select('blockedUsers');
+
+            // Check if viewing user has blocked the reel owner
+            if (viewingUser.blockedUsers && viewingUser.blockedUsers.includes(id)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You cannot view reels from a blocked user'
+                });
+            }
+
+            // Check if reel owner has blocked the viewing user
+            if (reelOwner.blockedUsers && reelOwner.blockedUsers.includes(viewingUserId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Content not available'
+                });
+            }
+        }
 
         // Build query to exclude reported reels if viewing user is authenticated
         let query = { userId: id };

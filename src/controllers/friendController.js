@@ -33,8 +33,24 @@ const sendFriendRequest = async (req, res) => {
             });
         }
 
-        // Check if they are already friends
+        // Check if sender has blocked the receiver
         const sender = await User.findById(senderId);
+        if (sender.blockedUsers && sender.blockedUsers.includes(receiverId)) {
+            return res.status(403).json({
+                success: false,
+                message: 'You cannot send a friend request to a blocked user'
+            });
+        }
+
+        // Check if receiver has blocked the sender
+        if (receiver.blockedUsers && receiver.blockedUsers.includes(senderId)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Action not available'
+            });
+        }
+
+        // Check if they are already friends (sender already fetched above)
         if (sender.friends && sender.friends.includes(receiverId)) {
             return res.status(400).json({
                 success: false,
@@ -142,6 +158,24 @@ const acceptFriendRequest = async (req, res) => {
             return res.status(403).json({
                 success: false,
                 message: 'You can only accept friend requests sent to you'
+            });
+        }
+
+        // Check if either user has blocked the other
+        const currentUser = await User.findById(userId).select('blockedUsers');
+        const senderUser = await User.findById(friendRequest.sender).select('blockedUsers');
+        
+        if (currentUser.blockedUsers && currentUser.blockedUsers.includes(friendRequest.sender)) {
+            return res.status(403).json({
+                success: false,
+                message: 'You cannot accept a friend request from a blocked user'
+            });
+        }
+
+        if (senderUser.blockedUsers && senderUser.blockedUsers.includes(userId)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Action not available'
             });
         }
 
@@ -263,7 +297,13 @@ const listFriends = async (req, res) => {
         // Get user with populated friends
         const user = await User.findById(userId)
             .populate('friends', 'firstName lastName name profileImage email bio currentCity hometown')
-            .select('friends');
+            .select('friends blockedUsers');
+        
+        // Filter out blocked users from friends list
+        const blockedUserIds = user.blockedUsers ? user.blockedUsers.map(id => id.toString()) : [];
+        const filteredFriends = (user.friends || []).filter(friend => 
+            !blockedUserIds.includes(friend._id.toString())
+        );
 
         if (!user) {
             return res.status(404).json({
@@ -276,8 +316,8 @@ const listFriends = async (req, res) => {
             success: true,
             message: 'Friends retrieved successfully',
             data: {
-                friends: user.friends || [],
-                count: user.friends ? user.friends.length : 0
+                friends: filteredFriends,
+                count: filteredFriends.length
             }
         });
     } catch (error) {
@@ -295,9 +335,14 @@ const listReceivedRequests = async (req, res) => {
     try {
         const userId = req.user._id;
 
+        // Get current user's blocked users
+        const currentUser = await User.findById(userId).select('blockedUsers');
+        const blockedUserIds = currentUser.blockedUsers || [];
+
         const requests = await FriendRequest.find({
             receiver: userId,
-            status: 'pending'
+            status: 'pending',
+            sender: { $nin: blockedUserIds } // Exclude requests from blocked users
         })
         .populate('sender', 'firstName lastName name profileImage email bio currentCity hometown')
         .sort({ createdAt: -1 });
@@ -325,9 +370,14 @@ const listSentRequests = async (req, res) => {
     try {
         const userId = req.user._id;
 
+        // Get current user's blocked users
+        const currentUser = await User.findById(userId).select('blockedUsers');
+        const blockedUserIds = currentUser.blockedUsers || [];
+
         const requests = await FriendRequest.find({
             sender: userId,
-            status: 'pending'
+            status: 'pending',
+            receiver: { $nin: blockedUserIds } // Exclude requests to blocked users
         })
         .populate('receiver', 'firstName lastName name profileImage email bio currentCity hometown')
         .sort({ createdAt: -1 });
@@ -487,8 +537,8 @@ const getFriendSuggestions = async (req, res) => {
         const userId = req.user._id;
         const limit = parseInt(req.query.limit) || 10;
 
-        // Get current user with friends
-        const user = await User.findById(userId).select('friends');
+        // Get current user with friends and blocked users
+        const user = await User.findById(userId).select('friends blockedUsers');
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -496,11 +546,13 @@ const getFriendSuggestions = async (req, res) => {
             });
         }
 
+        const blockedUserIds = user.blockedUsers ? user.blockedUsers.map(id => id.toString()) : [];
+
         // If user has no friends, return empty suggestions or random users
         if (!user.friends || user.friends.length === 0) {
-            // Return random users (excluding current user)
+            // Return random users (excluding current user and blocked users)
             const randomUsers = await User.find({
-                _id: { $ne: userId }
+                _id: { $ne: userId, $nin: user.blockedUsers || [] }
             })
             .select('firstName lastName name profileImage email bio currentCity hometown')
             .limit(limit);
@@ -543,6 +595,9 @@ const getFriendSuggestions = async (req, res) => {
 
                 // Skip if already a friend
                 if (user.friends.some(f => f.toString() === friendOfFriendIdStr)) continue;
+
+                // Skip if blocked
+                if (blockedUserIds.includes(friendOfFriendIdStr)) continue;
 
                 // Count mutual friends
                 if (!suggestionMap.has(friendOfFriendIdStr)) {
@@ -593,7 +648,8 @@ const getFriendSuggestions = async (req, res) => {
         // Get user details for suggestions
         const suggestionUserIds = filteredSuggestions.map(s => s.userId);
         const suggestedUsers = await User.find({
-            _id: { $in: suggestionUserIds }
+            _id: { $in: suggestionUserIds },
+            blockedUsers: { $ne: userId } // Exclude users who have blocked the current user
         })
         .select('firstName lastName name profileImage email bio currentCity hometown')
         .lean();

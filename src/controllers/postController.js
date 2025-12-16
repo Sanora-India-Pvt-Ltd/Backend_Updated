@@ -120,18 +120,39 @@ const getAllPosts = async (req, res) => {
         // Get user ID from token if authenticated (optional for feed)
         const userId = req.user?._id;
 
-        // Build query to exclude reported posts if user is authenticated
+        // Build query to exclude reported posts and blocked users' posts if user is authenticated
         let query = {};
+        let blockedUserIds = [];
+        
         if (userId) {
+            // Get current user's blocked users
+            const currentUser = await User.findById(userId).select('blockedUsers');
+            blockedUserIds = currentUser.blockedUsers || [];
+
             // Get all post IDs that the user has reported
             const reportedPostIds = await Report.find({
                 userId: userId,
                 contentType: 'post'
             }).distinct('contentId');
 
-            // Exclude reported posts from feed
-            if (reportedPostIds.length > 0) {
-                query._id = { $nin: reportedPostIds };
+            // Exclude reported posts and posts from blocked users
+            const excludeIds = [...reportedPostIds];
+            if (blockedUserIds.length > 0) {
+                // Also exclude posts from users who have blocked the current user
+                const usersWhoBlockedMe = await User.find({
+                    blockedUsers: userId
+                }).select('_id').lean();
+                const blockedByUserIds = usersWhoBlockedMe.map(u => u._id);
+                excludeIds.push(...blockedByUserIds);
+            }
+
+            if (excludeIds.length > 0) {
+                query._id = { $nin: excludeIds };
+            }
+
+            // Exclude posts from blocked users
+            if (blockedUserIds.length > 0) {
+                query.userId = { $nin: blockedUserIds };
             }
         }
 
@@ -296,6 +317,28 @@ const getUserPosts = async (req, res) => {
 
         // Get user ID from token if authenticated (optional)
         const viewingUserId = req.user?._id;
+
+        // Check if viewing user is blocked by the post owner or vice versa
+        if (viewingUserId) {
+            const viewingUser = await User.findById(viewingUserId).select('blockedUsers');
+            const postOwner = await User.findById(id).select('blockedUsers');
+
+            // Check if viewing user has blocked the post owner
+            if (viewingUser.blockedUsers && viewingUser.blockedUsers.includes(id)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You cannot view posts from a blocked user'
+                });
+            }
+
+            // Check if post owner has blocked the viewing user
+            if (postOwner.blockedUsers && postOwner.blockedUsers.includes(viewingUserId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Content not available'
+                });
+            }
+        }
 
         // Build query to exclude reported posts if viewing user is authenticated
         let query = { userId: id };

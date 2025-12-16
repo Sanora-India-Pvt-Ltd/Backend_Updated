@@ -2203,11 +2203,16 @@ const searchUsers = async (req, res) => {
 
         const searchTerm = query.trim();
 
+        // Get current user's blocked users
+        const currentUser = await User.findById(user._id).select('blockedUsers');
+        const blockedUserIds = currentUser.blockedUsers || [];
+
         // Search for users that match the query (case-insensitive)
         // Search across firstName, lastName, and name fields
-        // Exclude the current user from results
+        // Exclude the current user and blocked users from results
         const searchQuery = {
-            _id: { $ne: user._id }, // Exclude current user
+            _id: { $ne: user._id, $nin: blockedUserIds }, // Exclude current user and blocked users
+            blockedUsers: { $ne: user._id }, // Exclude users who have blocked the current user
             $or: [
                 { firstName: { $regex: searchTerm, $options: 'i' } },
                 { lastName: { $regex: searchTerm, $options: 'i' } },
@@ -2487,6 +2492,217 @@ const removeWorkplaceEntry = async (req, res) => {
     }
 };
 
+// Block a user
+const blockUser = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { blockedUserId } = req.params;
+
+        // Validate blockedUserId
+        if (!mongoose.Types.ObjectId.isValid(blockedUserId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user ID'
+            });
+        }
+
+        // Check if trying to block themselves
+        if (userId.toString() === blockedUserId) {
+            return res.status(400).json({
+                success: false,
+                message: 'You cannot block yourself'
+            });
+        }
+
+        // Check if user to block exists
+        const userToBlock = await User.findById(blockedUserId);
+        if (!userToBlock) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Get current user
+        const currentUser = await User.findById(userId);
+        if (!currentUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'Current user not found'
+            });
+        }
+
+        // Check if already blocked
+        if (currentUser.blockedUsers && currentUser.blockedUsers.includes(blockedUserId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is already blocked'
+            });
+        }
+
+        // Add to blocked users list
+        await User.findByIdAndUpdate(userId, {
+            $addToSet: { blockedUsers: blockedUserId }
+        });
+
+        // Remove from friends list if they are friends (both directions)
+        await User.findByIdAndUpdate(userId, {
+            $pull: { friends: blockedUserId }
+        });
+        await User.findByIdAndUpdate(blockedUserId, {
+            $pull: { friends: userId }
+        });
+
+        // Cancel any pending friend requests between them
+        const FriendRequest = require('../models/FriendRequest');
+        await FriendRequest.deleteMany({
+            $or: [
+                { sender: userId, receiver: blockedUserId },
+                { sender: blockedUserId, receiver: userId }
+            ]
+        });
+
+        // Get updated user with blocked user details
+        const updatedUser = await User.findById(userId)
+            .populate('blockedUsers', 'firstName lastName name profileImage email')
+            .select('blockedUsers');
+
+        res.status(200).json({
+            success: true,
+            message: 'User blocked successfully',
+            data: {
+                blockedUser: {
+                    _id: userToBlock._id,
+                    firstName: userToBlock.firstName,
+                    lastName: userToBlock.lastName,
+                    name: userToBlock.name,
+                    profileImage: userToBlock.profileImage,
+                    email: userToBlock.email
+                },
+                blockedUsers: updatedUser.blockedUsers
+            }
+        });
+    } catch (error) {
+        console.error('Block user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to block user',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// Unblock a user
+const unblockUser = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { blockedUserId } = req.params;
+
+        // Validate blockedUserId
+        if (!mongoose.Types.ObjectId.isValid(blockedUserId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user ID'
+            });
+        }
+
+        // Check if user to unblock exists
+        const userToUnblock = await User.findById(blockedUserId);
+        if (!userToUnblock) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Get current user
+        const currentUser = await User.findById(userId);
+        if (!currentUser) {
+            return res.status(404).json({
+                success: false,
+                message: 'Current user not found'
+            });
+        }
+
+        // Check if user is blocked
+        if (!currentUser.blockedUsers || !currentUser.blockedUsers.includes(blockedUserId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'User is not blocked'
+            });
+        }
+
+        // Remove from blocked users list
+        await User.findByIdAndUpdate(userId, {
+            $pull: { blockedUsers: blockedUserId }
+        });
+
+        // Get updated user
+        const updatedUser = await User.findById(userId)
+            .populate('blockedUsers', 'firstName lastName name profileImage email')
+            .select('blockedUsers');
+
+        res.status(200).json({
+            success: true,
+            message: 'User unblocked successfully',
+            data: {
+                unblockedUser: {
+                    _id: userToUnblock._id,
+                    firstName: userToUnblock.firstName,
+                    lastName: userToUnblock.lastName,
+                    name: userToUnblock.name,
+                    profileImage: userToUnblock.profileImage,
+                    email: userToUnblock.email
+                },
+                blockedUsers: updatedUser.blockedUsers
+            }
+        });
+    } catch (error) {
+        console.error('Unblock user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to unblock user',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+// List all blocked users
+const listBlockedUsers = async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        // Get user with populated blocked users
+        const user = await User.findById(userId)
+            .populate('blockedUsers', 'firstName lastName name profileImage email bio currentCity hometown')
+            .select('blockedUsers');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Blocked users retrieved successfully',
+            data: {
+                blockedUsers: user.blockedUsers || [],
+                count: user.blockedUsers ? user.blockedUsers.length : 0
+            }
+        });
+    } catch (error) {
+        console.error('List blocked users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve blocked users',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
+
 module.exports = {
     updateProfile,
     sendOTPForPhoneUpdate,
@@ -2506,6 +2722,9 @@ module.exports = {
     updateLocationAndDetails,
     searchUsers,
     removeEducationEntry,
-    removeWorkplaceEntry
+    removeWorkplaceEntry,
+    blockUser,
+    unblockUser,
+    listBlockedUsers
 };
 

@@ -122,6 +122,23 @@ const initSocketServer = async (httpServer) => {
                     return socket.emit('error', { message: 'Not authorized to send message' });
                 }
 
+                // Check if current user has blocked any participant or vice versa
+                const currentUser = await User.findById(userId).select('blockedUsers');
+                const otherParticipants = conversation.participants.filter(
+                    p => p.toString() !== userId
+                );
+
+                for (const participantId of otherParticipants) {
+                    if (currentUser.blockedUsers && currentUser.blockedUsers.includes(participantId)) {
+                        return socket.emit('error', { message: 'You cannot send messages to a blocked user' });
+                    }
+
+                    const otherUser = await User.findById(participantId).select('blockedUsers');
+                    if (otherUser.blockedUsers && otherUser.blockedUsers.includes(userId)) {
+                        return socket.emit('error', { message: 'Action not available' });
+                    }
+                }
+
                 // Reject audio messages
                 if (messageType === 'audio' || (media && media.some(m => m.type === 'audio'))) {
                     return socket.emit('error', { message: 'Audio messages are not allowed' });

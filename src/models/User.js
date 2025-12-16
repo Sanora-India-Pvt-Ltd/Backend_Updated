@@ -197,6 +197,10 @@ const userSchema = new mongoose.Schema({
     friends: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
+    }],
+    blockedUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
     }]
 }, {
     timestamps: true

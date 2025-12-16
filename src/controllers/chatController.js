@@ -9,8 +9,32 @@ const getConversations = async (req, res) => {
     try {
         const userId = req.user._id;
 
+        // Get current user's blocked users
+        const currentUser = await User.findById(userId).select('blockedUsers');
+        const blockedUserIds = currentUser.blockedUsers || [];
+
         const conversations = await Conversation.find({
-            participants: userId
+            participants: userId,
+            // Exclude conversations where all other participants are blocked
+            $expr: {
+                $gt: [
+                    {
+                        $size: {
+                            $filter: {
+                                input: '$participants',
+                                as: 'p',
+                                cond: {
+                                    $and: [
+                                        { $ne: ['$$p', userId] },
+                                        { $not: { $in: ['$$p', blockedUserIds] } }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    0
+                ]
+            }
         })
         .populate('participants', 'firstName lastName name profileImage')
         .populate('lastMessage')
@@ -85,6 +109,22 @@ const getOrCreateConversation = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
+            });
+        }
+
+        // Check if either user has blocked the other
+        const currentUser = await User.findById(userId).select('blockedUsers');
+        if (currentUser.blockedUsers && currentUser.blockedUsers.includes(participantId)) {
+            return res.status(403).json({
+                success: false,
+                message: 'You cannot create a conversation with a blocked user'
+            });
+        }
+
+        if (otherUser.blockedUsers && otherUser.blockedUsers.includes(userId)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Action not available'
             });
         }
 
@@ -272,6 +312,29 @@ const sendMessage = async (req, res) => {
                 success: false,
                 message: 'Not authorized to send message'
             });
+        }
+
+        // Check if current user has blocked any participant or vice versa
+        const currentUser = await User.findById(userId).select('blockedUsers');
+        const otherParticipants = conversation.participants.filter(
+            p => p.toString() !== userId.toString()
+        );
+
+        for (const participant of otherParticipants) {
+            if (currentUser.blockedUsers && currentUser.blockedUsers.includes(participant)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You cannot send messages to a blocked user'
+                });
+            }
+
+            const otherUser = await User.findById(participant).select('blockedUsers');
+            if (otherUser.blockedUsers && otherUser.blockedUsers.includes(userId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Action not available'
+                });
+            }
         }
 
         // Create message

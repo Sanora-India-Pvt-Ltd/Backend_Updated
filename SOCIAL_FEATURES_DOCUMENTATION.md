@@ -1,4 +1,4 @@
-# Social Features API Documentation
+# Sanora Social Features API Documentation
 
 **Base URL:** `https://api.ulearnandearn.com`
 
@@ -30,10 +30,14 @@
    - [Delete Reel](#19-delete-reel)
 4. [Reactions System](#reactions-system)
 5. [Comments System](#comments-system)
-6. [Reporting System](#reporting-system)
-7. [Data Models](#data-models)
-8. [Error Handling](#error-handling)
-9. [Examples](#examples)
+6. [Blocking System](#blocking-system)
+   - [Block a User](#1-block-a-user)
+   - [Unblock a User](#2-unblock-a-user)
+   - [List Blocked Users](#3-list-blocked-users)
+7. [Reporting System](#reporting-system)
+8. [Data Models](#data-models)
+9. [Error Handling](#error-handling)
+10. [Examples](#examples)
 
 ---
 
@@ -47,6 +51,7 @@ The Social Features API provides endpoints for creating and managing posts, reel
 - **Reactions**: 6 reaction types (happy, sad, angry, hug, wow, like)
 - **Comments**: Text-based comments on posts and reels
 - **Reporting**: Report inappropriate content with automatic moderation
+- **Blocking**: Block users to prevent seeing their content and prevent them from seeing yours
 - **Pagination**: All list endpoints support pagination
 
 ---
@@ -57,23 +62,22 @@ The Social Features API provides endpoints for creating and managing posts, reel
 
 **Method:** `POST`  
 **URL:** `/api/posts/upload-media`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
-Upload media (image or video) for a post. This must be done before creating a post with media. The endpoint returns media URLs and metadata that should be used when creating the post.
+Upload images or videos for posts. Files are uploaded to Cloudinary in user-specific folders (`user_uploads/{userId}/posts`). This endpoint is used as part of the post creation flow - upload media first, then create the post with the returned URLs.
+
+**Content-Type:** `multipart/form-data`
+
+**Request:**
+- **Field Name:** `media` (required)
+- **File Types:** Images (JPEG, PNG, GIF, WebP, etc.) and Videos (MP4, MOV, AVI, etc.)
+- **Max File Size:** 20MB
 
 **Headers:**
 ```
 Authorization: Bearer your_access_token_here
 ```
-
-**Request Body:**
-- **Content-Type:** `multipart/form-data`
-- **Field:** `media` (file) - Image or video file
-
-**Supported Formats:**
-- Images: JPG, PNG, GIF, WebP
-- Videos: MP4, MOV, AVI
 
 **Note:** Videos uploaded to posts are automatically transcoded to H.264 Baseline Profile 3.1 with yuv420p pixel format and faststart enabled for maximum compatibility across devices and browsers.
 
@@ -94,23 +98,41 @@ Authorization: Bearer your_access_token_here
 ```
 
 **Response Fields:**
-- `url` (string): Public URL of the uploaded media
-- `publicId` (string): Cloudinary public ID (used for deletion)
+- `url` (string): Secure HTTPS URL of the uploaded file
+- `publicId` (string): Cloudinary public ID
 - `type` (string): Media type - "image" or "video"
-- `format` (string): File format (e.g., "jpg", "mp4")
+- `format` (string): File format (e.g., "jpg", "png", "mp4")
 - `fileSize` (number): File size in bytes
-- `mediaId` (string): Database record ID
+- `mediaId` (string): Database record ID for the upload
 
 **Error Responses:**
-- `400`: No file provided, invalid file type, file too large
+- `400`: No file uploaded
 - `401`: Not authenticated
 - `500`: Upload failed
 
-**Example using cURL:**
+**Note:** Use the returned `url`, `publicId`, and `type` in the create post endpoint.
+
+---
 ```bash
 curl -X POST https://api.ulearnandearn.com/api/posts/upload-media \
-  -H "Authorization: Bearer your_access_token" \
-  -F "media=@/path/to/image.jpg"
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -F "media=@/path/to/your/image.jpg"
+```
+
+**Example using JavaScript (FormData):**
+```javascript
+const formData = new FormData();
+formData.append('media', fileInput.files[0]);
+
+const response = await fetch('https://api.ulearnandearn.com/api/posts/upload-media', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  },
+  body: formData
+});
+
+const result = await response.json();
 ```
 
 ---
@@ -119,10 +141,10 @@ curl -X POST https://api.ulearnandearn.com/api/posts/upload-media \
 
 **Method:** `POST`  
 **URL:** `/api/posts/create`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
-Create a new post with optional caption and/or media. Posts can be text-only, media-only, or both. Media URLs must be obtained from the upload endpoint first.
+Create a new post. Posts can have a caption, media (images/videos), or both. Media URLs should be obtained from the upload post media endpoint first.
 
 **Headers:**
 ```
@@ -229,7 +251,12 @@ Content-Type: application/json
 **Authentication:** Not required
 
 **Description:**  
-Retrieve all posts for the feed. Results are sorted by newest first and include pagination support.
+Retrieve all posts for the feed. Results are sorted by newest first and include pagination support. Each post includes up to 15 most recent comments (sorted by newest first). The `commentCount` field shows the total number of comments.
+
+**Blocking Behavior:**
+- If authenticated, posts from users you've blocked are automatically excluded from the feed
+- Posts from users who have blocked you are also excluded from the feed
+- Unauthenticated users see all posts (no blocking filters applied)
 
 **Query Parameters:**
 - `page` (number, optional): Page number (default: 1)
@@ -238,6 +265,17 @@ Retrieve all posts for the feed. Results are sorted by newest first and include 
 **Example Request:**
 ```bash
 GET /api/posts/all?page=1&limit=10
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.ulearnandearn.com/api/posts/all?page=1&limit=10"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.ulearnandearn.com/api/posts/all?page=1&limit=10');
+const data = await response.json();
 ```
 
 **Success Response (200):**
@@ -288,10 +326,10 @@ GET /api/posts/all?page=1&limit=10
 
 **Method:** `GET`  
 **URL:** `/api/posts/me`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
-Get all posts created by the currently authenticated user.
+Get all posts created by the currently authenticated user. Each post includes up to 15 most recent comments (sorted by newest first). The `commentCount` field shows the total number of comments.
 
 **Headers:**
 ```
@@ -335,7 +373,12 @@ Same structure as "Get All Posts" but includes a `user` object and only posts fr
 **Authentication:** Not required
 
 **Description:**  
-Get all posts created by a specific user.
+Get all posts created by a specific user. Each post includes up to 15 most recent comments (sorted by newest first). The `commentCount` field shows the total number of comments.
+
+**Blocking Behavior:**
+- If you have blocked the user or they have blocked you, the request will return a `403 Forbidden` error
+- You cannot view posts from blocked users or users who have blocked you
+- Unauthenticated users can view any user's posts (no blocking checks)
 
 **URL Parameters:**
 - `id` (string, required): User ID
@@ -371,6 +414,7 @@ Same structure as "Get All Posts" but includes a `user` object and only posts fr
 
 **Error Responses:**
 - `400`: Invalid user ID
+- `403`: You cannot view posts from a blocked user / Content not available
 - `404`: User not found
 - `500`: Failed to retrieve posts
 
@@ -380,7 +424,7 @@ Same structure as "Get All Posts" but includes a `user` object and only posts fr
 
 **Method:** `POST`  
 **URL:** `/api/posts/:id/like`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Add, update, or remove a reaction on a post. If the user hasn't reacted, it adds a reaction. If the user has reacted with the same reaction type, it removes it. If the user has reacted with a different reaction type, it updates to the new reaction.
@@ -454,9 +498,23 @@ Content-Type: application/json
 **Example using cURL:**
 ```bash
 curl -X POST https://api.ulearnandearn.com/api/posts/post_id_123/like \
-  -H "Authorization: Bearer your_access_token" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"reaction": "happy"}'
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.ulearnandearn.com/api/posts/post_id_123/like', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({ reaction: 'happy' })
+});
+
+const data = await response.json();
 ```
 
 ---
@@ -465,10 +523,10 @@ curl -X POST https://api.ulearnandearn.com/api/posts/post_id_123/like \
 
 **Method:** `POST`  
 **URL:** `/api/posts/:id/comment`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
-Add a text comment to a post.
+Add a text comment to a post. The response includes the newly added comment and the post with up to 15 most recent comments (sorted by newest first).
 
 **Headers:**
 ```
@@ -544,7 +602,7 @@ Content-Type: application/json
 
 **Method:** `DELETE`  
 **URL:** `/api/posts/:id/comment/:commentId`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Delete a comment from a post. Only the comment owner or post owner can delete comments.
@@ -579,7 +637,7 @@ Authorization: Bearer your_access_token_here
 
 **Method:** `POST`  
 **URL:** `/api/posts/:id/report`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Report a post for inappropriate content. When a user reports a post, it is immediately removed from their feed. If 2 users report the same post with the same reason, the post is automatically deleted from the database and all associated media is removed from Cloudinary.
@@ -649,7 +707,7 @@ Content-Type: application/json
 **Example using cURL:**
 ```bash
 curl -X POST https://api.ulearnandearn.com/api/posts/post_id_123/report \
-  -H "Authorization: Bearer your_access_token" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"reason": "bullying_harassment_or_abuse"}'
 ```
@@ -660,7 +718,7 @@ curl -X POST https://api.ulearnandearn.com/api/posts/post_id_123/report \
 
 **Method:** `DELETE`  
 **URL:** `/api/posts/:id`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Delete a post. Only the post owner can delete their own post. This will also delete all associated media from Cloudinary.
@@ -696,7 +754,7 @@ Authorization: Bearer your_access_token_here
 
 **Method:** `POST`  
 **URL:** `/api/reels/upload-media`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Upload video media for a reel. This must be done before creating a reel. The endpoint returns video URL, thumbnail, and metadata.
@@ -758,7 +816,7 @@ Authorization: Bearer your_access_token_here
 
 **Method:** `POST`  
 **URL:** `/api/reels/create`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Create a new reel with video media. Reels must have a contentType (education or fun) and can have an optional caption.
@@ -863,7 +921,12 @@ Content-Type: application/json
 **Authentication:** Not required
 
 **Description:**  
-Retrieve reels filtered by contentType. Only public reels are returned.
+Retrieve reels filtered by contentType. Only public reels are returned. Each reel includes up to 15 most recent comments (sorted by newest first). The `commentCount` field shows the total number of comments.
+
+**Blocking Behavior:**
+- If authenticated, reels from users you've blocked are automatically excluded from the feed
+- Reels from users who have blocked you are also excluded from the feed
+- Unauthenticated users see all public reels (no blocking filters applied)
 
 **Query Parameters:**
 - `contentType` (string, required): Content type - "education" or "fun"
@@ -923,7 +986,12 @@ GET /api/reels?contentType=education&page=1&limit=10
 **Authentication:** Not required
 
 **Description:**  
-Get all reels created by a specific user. Returns all reels regardless of visibility setting.
+Get all reels created by a specific user. Returns all reels regardless of visibility setting. Each reel includes up to 15 most recent comments (sorted by newest first). The `commentCount` field shows the total number of comments.
+
+**Blocking Behavior:**
+- If you have blocked the user or they have blocked you, the request will return a `403 Forbidden` error
+- You cannot view reels from blocked users or users who have blocked you
+- Unauthenticated users can view any user's reels (no blocking checks)
 
 **URL Parameters:**
 - `id` (string, required): User ID
@@ -959,6 +1027,7 @@ Same structure as "Get Reels by Content Type" but includes a `user` object and o
 
 **Error Responses:**
 - `400`: Invalid user ID
+- `403`: You cannot view reels from a blocked user / Content not available
 - `404`: User not found
 - `500`: Failed to retrieve user reels
 
@@ -968,7 +1037,7 @@ Same structure as "Get Reels by Content Type" but includes a `user` object and o
 
 **Method:** `POST`  
 **URL:** `/api/reels/:id/like`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Add, update, or remove a reaction on a reel. Same behavior as post reactions.
@@ -1007,9 +1076,9 @@ Content-Type: application/json
       "visibility": "public",
       "views": 150,
       "likes": [[], [], [], [], [], []],
-      "comments": [...],
+      "comments": [...], // Up to 15 most recent comments
       "likeCount": 1,
-      "commentCount": 5,
+      "commentCount": 5, // Total comment count (may be more than comments array length)
       "createdAt": "2024-01-15T10:30:00.000Z",
       "updatedAt": "2024-01-15T10:30:00.000Z"
     },
@@ -1032,10 +1101,10 @@ Content-Type: application/json
 
 **Method:** `POST`  
 **URL:** `/api/reels/:id/comment`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
-Add a text comment to a reel.
+Add a text comment to a reel. The response includes the newly added comment and the reel with up to 15 most recent comments (sorted by newest first).
 
 **Headers:**
 ```
@@ -1071,7 +1140,7 @@ Same structure as post comments but for reels.
 
 **Method:** `DELETE`  
 **URL:** `/api/reels/:id/comment/:commentId`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Delete a comment from a reel. Only the comment owner or reel owner can delete comments.
@@ -1106,7 +1175,7 @@ Authorization: Bearer your_access_token_here
 
 **Method:** `POST`  
 **URL:** `/api/reels/:id/report`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Report a reel for inappropriate content. When a user reports a reel, it is immediately removed from their feed. If 2 users report the same reel with the same reason, the reel is automatically deleted from the database and all associated media (video and thumbnail) is removed from Cloudinary.
@@ -1167,7 +1236,7 @@ Content-Type: application/json
 **Example using cURL:**
 ```bash
 curl -X POST https://api.ulearnandearn.com/api/reels/reel_id_123/report \
-  -H "Authorization: Bearer your_access_token" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"reason": "adult_content"}'
 ```
@@ -1178,7 +1247,7 @@ curl -X POST https://api.ulearnandearn.com/api/reels/reel_id_123/report \
 
 **Method:** `DELETE`  
 **URL:** `/api/reels/:id`  
-**Authentication:** Required (Bearer Token)
+**Authentication:** Required
 
 **Description:**  
 Delete a reel. Only the reel owner can delete their own reel. This will also delete all associated media (video and thumbnail) from Cloudinary.
@@ -1327,6 +1396,296 @@ Each comment contains:
 
 ---
 
+## Blocking System
+
+### Overview
+
+The blocking system allows users to block other users, preventing mutual interaction and content visibility. When a user blocks another user:
+
+1. **Content Visibility**: Blocked users' posts, reels, and stories are automatically excluded from feeds
+2. **Profile Access**: Blocked users cannot view each other's content when accessing specific user profiles
+3. **Bidirectional**: Blocking works both ways - if User A blocks User B, User B also cannot see User A's content
+4. **Automatic Cleanup**: When blocking, users are automatically removed from each other's friends list and any pending friend requests are cancelled
+5. **Privacy**: Users cannot see who has blocked them - error messages are generic to protect privacy
+
+### Blocking Behavior by Feature
+
+#### Posts
+- **Feed (`/api/posts/all`)**: Posts from blocked users are automatically filtered out
+- **User Posts (`/api/posts/user/:id`)**: Returns `403 Forbidden` with generic message if either user has blocked the other (users cannot see who blocked them)
+
+#### Reels
+- **Feed (`/api/reels`)**: Reels from blocked users are automatically filtered out
+- **User Reels (`/api/reels/user/:id`)**: Returns `403 Forbidden` with generic message if either user has blocked the other (users cannot see who blocked them)
+
+#### Stories
+- **Friends Stories (`/api/stories/friends`)**: Stories from blocked users are automatically filtered out
+- **User Stories (`/api/stories/user/:id`)**: Returns `403 Forbidden` with generic message if either user has blocked the other (users cannot see who blocked them)
+
+#### Friends System
+- Blocked users cannot send friend requests to each other
+- Blocked users cannot accept friend requests from each other
+- Blocked users are automatically removed from each other's friends list when blocking occurs
+- Blocked users are excluded from friend suggestions
+
+#### Chat System
+- Blocked users cannot create conversations with each other
+- Blocked users cannot send messages to each other
+- Existing conversations with blocked users are filtered from conversation lists
+
+#### Search
+- Blocked users are excluded from search results
+- Users who have blocked you are also excluded from your search results (users cannot see who blocked them)
+
+### Blocking Endpoints
+
+#### 1. Block a User
+
+**Method:** `POST`  
+**URL:** `/api/user/block/:blockedUserId`  
+**Authentication:** Required
+
+**Description:**  
+Block a user. When you block a user, they are automatically removed from your friends list (if they were a friend), any pending friend requests between you are cancelled, and you will no longer see their content in feeds. The blocked user will also not be able to see your content.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**URL Parameters:**
+- `blockedUserId` (string, required): ID of the user to block
+
+**Example Request:**
+```bash
+POST /api/user/block/user_id_123
+```
+
+**Example using cURL:**
+```bash
+curl -X POST https://api.ulearnandearn.com/api/user/block/user_id_123 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.ulearnandearn.com/api/user/block/user_id_123', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  }
+});
+
+const data = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "User blocked successfully",
+  "data": {
+    "blockedUser": {
+      "_id": "user_id_123",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "name": "Jane Smith",
+      "profileImage": "https://...",
+      "email": "jane@example.com"
+    },
+    "blockedUsers": [
+      {
+        "_id": "user_id_123",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "name": "Jane Smith",
+        "profileImage": "https://...",
+        "email": "jane@example.com"
+      }
+    ]
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid user ID, you cannot block yourself, user is already blocked
+- `401`: Not authenticated
+- `404`: User not found
+- `500`: Failed to block user
+
+**Note:** 
+- Blocking automatically removes the user from your friends list (if they were a friend)
+- Any pending friend requests between you and the blocked user are automatically cancelled
+- Blocking is bidirectional - the blocked user cannot see your content either
+
+---
+
+#### 2. Unblock a User
+
+**Method:** `DELETE`  
+**URL:** `/api/user/block/:blockedUserId`  
+**Authentication:** Required
+
+**Description:**  
+Unblock a previously blocked user. After unblocking, you will be able to see their content again, and they will be able to see yours. However, you will need to send a new friend request if you want to be friends again.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**URL Parameters:**
+- `blockedUserId` (string, required): ID of the user to unblock
+
+**Example Request:**
+```bash
+DELETE /api/user/block/user_id_123
+```
+
+**Example using cURL:**
+```bash
+curl -X DELETE https://api.ulearnandearn.com/api/user/block/user_id_123 \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.ulearnandearn.com/api/user/block/user_id_123', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  }
+});
+
+const data = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "User unblocked successfully",
+  "data": {
+    "unblockedUser": {
+      "_id": "user_id_123",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "name": "Jane Smith",
+      "profileImage": "https://...",
+      "email": "jane@example.com"
+    },
+    "blockedUsers": []
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid user ID, user is not blocked
+- `401`: Not authenticated
+- `404`: User not found
+- `500`: Failed to unblock user
+
+**Note:** 
+- Unblocking does not automatically restore the friendship - you'll need to send a new friend request
+- After unblocking, both users can see each other's content again
+
+---
+
+#### 3. List Blocked Users
+
+**Method:** `GET`  
+**URL:** `/api/user/blocked`  
+**Authentication:** Required
+
+**Description:**  
+Get a list of all users you have blocked. Returns an array of blocked user objects with their basic information.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/user/blocked
+```
+
+**Example using cURL:**
+```bash
+curl -X GET https://api.ulearnandearn.com/api/user/blocked \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Example using JavaScript:**
+```javascript
+const response = await fetch('https://api.ulearnandearn.com/api/user/blocked', {
+  method: 'GET',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  }
+});
+
+const data = await response.json();
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Blocked users retrieved successfully",
+  "data": {
+    "blockedUsers": [
+      {
+        "_id": "user_id_123",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "name": "Jane Smith",
+        "profileImage": "https://...",
+        "email": "jane@example.com",
+        "bio": "Software developer",
+        "currentCity": "San Francisco, CA",
+        "hometown": "New York, NY"
+      },
+      {
+        "_id": "user_id_456",
+        "firstName": "Bob",
+        "lastName": "Johnson",
+        "name": "Bob Johnson",
+        "profileImage": "https://...",
+        "email": "bob@example.com",
+        "bio": "",
+        "currentCity": "",
+        "hometown": ""
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+**Response Fields:**
+- `blockedUsers` (array): Array of blocked user objects
+- `count` (number): Total number of blocked users
+
+**Error Responses:**
+- `401`: Not authenticated
+- `404`: User not found
+- `500`: Failed to retrieve blocked users
+
+---
+
+### Important Notes
+
+1. **Bidirectional Blocking**: Blocking is bidirectional - if User A blocks User B, both users cannot see each other's content
+2. **Feed Filtering**: Blocked content is automatically filtered from feeds when the user is authenticated
+3. **Profile Access**: Attempting to access a blocked user's profile content will return a `403 Forbidden` error with a generic message (users cannot see who blocked them)
+4. **Automatic Cleanup**: When blocking, the system automatically:
+   - Removes users from each other's friends list
+   - Cancels any pending friend requests between them
+5. **Unblocking**: Users can unblock each other at any time, which restores normal interaction capabilities
+
+---
+
 ## Reporting System
 
 ### Overview
@@ -1369,6 +1728,11 @@ Reported content is automatically filtered from user feeds:
 - **Get User Reels** (`/api/reels/user/:id`): Excludes reels reported by the viewing user
 
 **Note:** Feed filtering only applies when the user is authenticated. Unauthenticated users see all content.
+
+**Combined Filtering:**
+- Feeds apply both reporting and blocking filters simultaneously
+- Content is excluded if it's either reported by the user OR from a blocked user
+- This ensures users only see content they want to see
 
 ### Report Data Structure
 
@@ -1738,10 +2102,12 @@ async function reportReel(reelId, reason) {
 3. **Error Handling**: Always check the `success` field in responses
 4. **Reaction Updates**: Handle the three possible actions: "liked", "unliked", "reaction_updated"
 5. **Comment Length**: Respect character limits (1000 for posts, 500 for reels)
+6. **Comment Display**: Only 15 most recent comments are returned. Use `commentCount` to determine if more comments exist and implement "View more comments" functionality if needed
 6. **Reporting**: Select the most appropriate reason when reporting content
-7. **Authentication**: Store and refresh access tokens securely
-8. **Rate Limiting**: Be mindful of API rate limits when making multiple requests
-9. **Feed Filtering**: Remember that reported content is automatically filtered from authenticated user feeds
+7. **Blocking**: Use blocking to prevent seeing unwanted content and to prevent others from seeing your content
+8. **Authentication**: Store and refresh access tokens securely
+9. **Rate Limiting**: Be mindful of API rate limits when making multiple requests
+10. **Feed Filtering**: Remember that both reported and blocked content is automatically filtered from authenticated user feeds
 
 ---
 
@@ -1793,4 +2159,15 @@ The reporting system provides automatic content moderation:
 - **Media Cleanup**: All associated media is automatically removed from Cloudinary when content is deleted
 
 This ensures a safe and appropriate content environment while maintaining user privacy and preventing abuse of the reporting system.
+
+### Blocking System
+
+The blocking system provides additional content control:
+
+- **User Control**: Users can block other users to prevent mutual interaction
+- **Content Filtering**: Blocked users' content is automatically excluded from feeds
+- **Bidirectional**: Blocking works both ways for complete privacy
+- **Automatic Cleanup**: Blocking automatically removes users from friends lists and cancels pending requests
+
+Combined with the reporting system, users have comprehensive tools to control their social media experience and maintain a safe environment.
 

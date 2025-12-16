@@ -103,6 +103,31 @@ const getUserStories = async (req, res) => {
             });
         }
 
+        // Get user ID from token if authenticated (optional)
+        const viewingUserId = req.user?._id;
+
+        // Check if viewing user is blocked by the story owner or vice versa
+        if (viewingUserId) {
+            const viewingUser = await User.findById(viewingUserId).select('blockedUsers');
+            const storyOwner = await User.findById(id).select('blockedUsers');
+
+            // Check if viewing user has blocked the story owner
+            if (viewingUser.blockedUsers && viewingUser.blockedUsers.includes(id)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You cannot view stories from a blocked user'
+                });
+            }
+
+            // Check if story owner has blocked the viewing user
+            if (storyOwner.blockedUsers && storyOwner.blockedUsers.includes(viewingUserId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Content not available'
+                });
+            }
+        }
+
         // Get active stories (expiresAt > now) for this user
         const now = new Date();
         const stories = await Story.find({
@@ -161,8 +186,8 @@ const getAllFriendsStories = async (req, res) => {
     try {
         const user = req.user; // From protect middleware
 
-        // Get user's friends list
-        const currentUser = await User.findById(user._id).select('friends');
+        // Get user's friends list and blocked users
+        const currentUser = await User.findById(user._id).select('friends blockedUsers');
         if (!currentUser) {
             return res.status(404).json({
                 success: false,
@@ -172,16 +197,34 @@ const getAllFriendsStories = async (req, res) => {
 
         // Include current user's own stories as well
         const friendIds = currentUser.friends || [];
-        const allUserIds = [...friendIds, user._id]; // Keep as ObjectIds for MongoDB query
+        const blockedUserIds = currentUser.blockedUsers || [];
+        
+        // Filter out blocked users from friend list
+        const unblockedFriendIds = friendIds.filter(
+            friendId => !blockedUserIds.some(blockedId => blockedId.toString() === friendId.toString())
+        );
+        
+        const allUserIds = [...unblockedFriendIds, user._id]; // Keep as ObjectIds for MongoDB query
 
         // Get active stories (expiresAt > now) from friends and self
         const now = new Date();
-        const stories = await Story.find({
+        let stories = await Story.find({
             userId: { $in: allUserIds },
             expiresAt: { $gt: now }
         })
-        .populate('userId', 'firstName lastName name email profileImage')
-        .sort({ createdAt: -1 }); // Most recent first
+            .populate('userId', 'firstName lastName name email profileImage')
+            .sort({ createdAt: -1 }); // Most recent first
+
+        // Also filter out stories from users who have blocked the current user
+        const usersWhoBlockedMe = await User.find({
+            blockedUsers: user._id
+        }).select('_id').lean();
+        const blockedByUserIds = new Set(usersWhoBlockedMe.map(u => u._id.toString()));
+        
+        stories = stories.filter(story => {
+            const storyUserId = story.userId._id ? story.userId._id.toString() : story.userId.toString();
+            return !blockedByUserIds.has(storyUserId);
+        });
 
         // Group stories by user
         const storiesByUser = {};

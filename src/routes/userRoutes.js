@@ -12,7 +12,10 @@ const {
     updateLocationAndDetails,
     searchUsers,
     removeEducationEntry,
-    removeWorkplaceEntry
+    removeWorkplaceEntry,
+    blockUser,
+    unblockUser,
+    listBlockedUsers
 } = require('../controllers/userController');
 const { limitOTPRequests, limitVerifyRequests } = require('../middleware/rateLimiter');
 
@@ -50,6 +53,11 @@ router.delete('/alternate-phone', removeAlternatePhone);
 router.delete('/education/:index', removeEducationEntry);
 router.delete('/workplace/:index', removeWorkplaceEntry);
 
+// Blocking functionality
+router.post('/block/:blockedUserId', blockUser);
+router.delete('/block/:blockedUserId', unblockUser);
+router.get('/blocked', listBlockedUsers);
+
 // Debug: Log all registered routes
 console.log('📋 User routes registered:');
 console.log('  GET    /api/user/search (protected)');
@@ -64,6 +72,9 @@ console.log('  PUT    /api/user/profile/personal-info (protected)');
 console.log('  PUT    /api/user/profile/location-details (protected)');
 console.log('  DELETE /api/user/education/:index (protected)');
 console.log('  DELETE /api/user/workplace/:index (protected)');
+console.log('  POST   /api/user/block/:blockedUserId (protected)');
+console.log('  DELETE /api/user/block/:blockedUserId (protected)');
+console.log('  GET    /api/user/blocked (protected)');
 
 module.exports = router;
 
