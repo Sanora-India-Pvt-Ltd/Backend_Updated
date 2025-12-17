@@ -754,6 +754,9 @@ const getProfile = async (req, res) => {
             endYear: edu.endYear
         }));
 
+        // Get number of friends
+        const numberOfFriends = user.friends ? user.friends.length : 0;
+
         res.status(200).json({
             success: true,
             message: 'User profile retrieved successfully',
@@ -778,6 +781,10 @@ const getProfile = async (req, res) => {
                     education: formattedEducation,
                     isGoogleOAuth: user.isGoogleOAuth,
                     googleId: user.googleId,
+                    numberOfFriends: numberOfFriends,
+                    generalWeightage: user.generalWeightage || 0,
+                    professionalWeightage: user.professionalWeightage || 0,
+                    token: user.token || null,
                     createdAt: user.createdAt,
                     updatedAt: user.updatedAt
                 }

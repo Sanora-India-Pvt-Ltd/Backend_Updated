@@ -74,7 +74,11 @@
    - [Mark Messages as Read](#60-mark-messages-as-read)
    - [Get Unread Count](#61-get-unread-count)
    - [WebSocket Events](#websocket-events)
-11. [OTP Verification](#-otp-verification)
+11. [Bug Reports](#-bug-reports)
+   - [Create Bug Report](#62-create-bug-report)
+   - [Get My Bug Reports](#63-get-my-bug-reports)
+   - [Get Bug Report by ID](#64-get-bug-report-by-id)
+12. [OTP Verification](#-otp-verification)
    - [Send Phone OTP (Twilio)](#send-phone-otp-twilio)
    - [Verify Phone OTP (Twilio)](#verify-phone-otp-twilio)
    - [Send OTP for Signup (Email)](#6-send-otp-for-signup-email)
@@ -84,16 +88,16 @@
    - [Send OTP for Password Reset](#10-send-otp-for-password-reset)
    - [Verify OTP for Password Reset](#11-verify-otp-for-password-reset)
    - [Reset Password](#12-reset-password)
-12. [Google OAuth](#-google-oauth)
+13. [Google OAuth](#-google-oauth)
    - [Web OAuth](#13-google-oauth-web-redirect-flow)
    - [OAuth Callback](#14-google-oauth-callback)
    - [Mobile OAuth](#15-google-oauth-mobile-androidios)
    - [Verify Google Token](#16-verify-google-token-androidiosweb)
    - [Check Email](#18-check-email-exists)
-13. [Authentication Flows](#-authentication-flows)
-14. [Error Handling](#-error-handling)
-15. [Security Features](#-security-features)
-16. [Testing Examples](#-testing-examples)
+14. [Authentication Flows](#-authentication-flows)
+15. [Error Handling](#-error-handling)
+16. [Security Features](#-security-features)
+17. [Testing Examples](#-testing-examples)
 
 ---
 
@@ -545,12 +549,43 @@ Authorization: Bearer your_access_token_here
       ],
       "isGoogleOAuth": false,
       "googleId": null,
+      "numberOfFriends": 15,
+      "generalWeightage": 75.5,
+      "professionalWeightage": 82.3,
+      "token": "user_token_string_here",
       "createdAt": "2024-01-01T12:00:00.000Z",
       "updatedAt": "2024-01-01T12:00:00.000Z"
     }
   }
 }
 ```
+
+**Response Fields:**
+- `id` (string): User's database ID
+- `email` (string): User's email address
+- `firstName` (string): User's first name
+- `lastName` (string): User's last name
+- `phoneNumber` (string): User's primary phone number
+- `alternatePhoneNumber` (string): User's alternate phone number
+- `gender` (string): User's gender (Male, Female, Other, Prefer not to say)
+- `name` (string): User's full name
+- `dob` (date): User's date of birth
+- `profileImage` (string): URL of user's profile image
+- `coverPhoto` (string): URL of user's cover photo
+- `bio` (string): User's biography/description
+- `currentCity` (string): User's current city
+- `hometown` (string): User's hometown
+- `relationshipStatus` (string): User's relationship status
+- `workplace` (array): Array of workplace objects
+- `education` (array): Array of education objects
+- `isGoogleOAuth` (boolean): Whether user signed up via Google OAuth
+- `googleId` (string): Google ID if user signed up via Google OAuth
+- `numberOfFriends` (number): Total number of friends the user has
+- `generalWeightage` (number): General weightage value (default: 0)
+- `professionalWeightage` (number): Professional weightage value (default: 0)
+- `token` (string): User's token value (default: null)
+- `createdAt` (date): Account creation timestamp
+- `updatedAt` (date): Last update timestamp
 
 **Error Responses:**
 - `401`: No token, invalid token, expired token
@@ -5381,6 +5416,352 @@ socket.on('error', (data) => {
 - Messages are automatically saved to database
 - Status updates: `sent` → `delivered` (if recipient online) → `read` (when viewed)
 - **Audio messages are not supported** - attempting to send audio via WebSocket will emit an error event with message "Audio messages are not allowed"
+
+---
+
+## 🐛 Bug Reports
+
+The bug reporting system allows users to report bugs and issues they encounter while using the app. Bug reports are stored in the `bugreports` collection in the same database cluster as other collections (companies, conversations, friendrequests, institutions, media, messages, otps, posts, reels, reports, stories, users). All endpoints require authentication.
+
+### Bug Severity Levels
+
+- `low` - Minor issues that don't significantly impact functionality
+- `medium` - Issues that affect some functionality but have workarounds
+- `high` - Issues that significantly impact functionality
+- `critical` - Issues that prevent core functionality from working
+
+### Bug Status
+
+- `open` - Bug report has been submitted and is awaiting review
+- `in_progress` - Bug is being investigated or fixed
+- `resolved` - Bug has been fixed
+- `closed` - Bug report has been closed (duplicate, invalid, etc.)
+
+---
+
+### 62. Create Bug Report
+
+**Method:** `POST`  
+**URL:** `/api/bug-reports`  
+**Authentication:** Required
+
+**Description:**  
+Submit a new bug report with details about the issue encountered. Users can include device information, steps to reproduce, and attachments (screenshots, videos, etc.).
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "title": "App crashes when uploading video",
+  "description": "The app crashes immediately when I try to upload a video longer than 30 seconds. This happens consistently on my iPhone 13 running iOS 17.",
+  "severity": "high",
+  "deviceInfo": "iPhone 13",
+  "browserInfo": "Safari 17.0",
+  "osInfo": "iOS 17.2",
+  "appVersion": "1.0.0",
+  "stepsToReproduce": "1. Open app\n2. Tap on create post\n3. Select video longer than 30 seconds\n4. App crashes",
+  "expectedBehavior": "Video should upload successfully",
+  "actualBehavior": "App crashes immediately",
+  "attachments": [
+    {
+      "url": "https://cloudinary.com/image.jpg",
+      "type": "image"
+    }
+  ]
+}
+```
+
+**Required Fields:**
+- `title` (string, max 200 characters): Brief title describing the bug
+- `description` (string, max 5000 characters): Detailed description of the bug
+
+**Optional Fields:**
+- `severity` (string): One of `low`, `medium`, `high`, `critical` (default: `medium`)
+- `deviceInfo` (string): Device information (e.g., "iPhone 13", "Samsung Galaxy S21")
+- `browserInfo` (string): Browser information (e.g., "Chrome 120", "Safari 17.0")
+- `osInfo` (string): Operating system information (e.g., "iOS 17.2", "Android 13")
+- `appVersion` (string): App version where the bug was encountered
+- `stepsToReproduce` (string, max 2000 characters): Step-by-step instructions to reproduce the bug
+- `expectedBehavior` (string, max 1000 characters): What should happen
+- `actualBehavior` (string, max 1000 characters): What actually happens
+- `attachments` (array): Array of attachment objects
+  - `url` (string, required): URL of the attachment
+  - `type` (string, required): One of `image`, `video`, `file`
+
+**Example Request:**
+```bash
+POST /api/bug-reports
+```
+
+**Example using cURL:**
+```bash
+curl -X POST "https://api.ulearnandearn.com/api/bug-reports" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "App crashes when uploading video",
+    "description": "The app crashes when uploading videos longer than 30 seconds",
+    "severity": "high",
+    "deviceInfo": "iPhone 13",
+    "osInfo": "iOS 17.2",
+    "appVersion": "1.0.0"
+  }'
+```
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "Bug report submitted successfully",
+  "data": {
+    "bugReport": {
+      "id": "507f1f77bcf86cd799439011",
+      "userId": "507f191e810c19729de860ea",
+      "user": {
+        "id": "507f191e810c19729de860ea",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "profileImage": "https://..."
+      },
+      "title": "App crashes when uploading video",
+      "description": "The app crashes when uploading videos longer than 30 seconds",
+      "severity": "high",
+      "status": "open",
+      "deviceInfo": "iPhone 13",
+      "browserInfo": "Safari 17.0",
+      "osInfo": "iOS 17.2",
+      "appVersion": "1.0.0",
+      "stepsToReproduce": "1. Open app\n2. Tap on create post\n3. Select video longer than 30 seconds\n4. App crashes",
+      "expectedBehavior": "Video should upload successfully",
+      "actualBehavior": "App crashes immediately",
+      "attachments": [
+        {
+          "url": "https://cloudinary.com/image.jpg",
+          "type": "image"
+        }
+      ],
+      "adminResponse": null,
+      "resolvedAt": null,
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:00:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid request (missing required fields, invalid severity, etc.)
+- `401`: Not authenticated
+- `500`: Failed to submit bug report
+
+**Notes:**
+- Bug reports are stored in the `bugreports` collection in the same database cluster
+- All bug reports start with status `open`
+- Attachments should be uploaded to Cloudinary first, then URLs included in the bug report
+- Users can only view their own bug reports
+
+---
+
+### 63. Get My Bug Reports
+
+**Method:** `GET`  
+**URL:** `/api/bug-reports/me`  
+**Authentication:** Required
+
+**Description:**  
+Retrieve all bug reports submitted by the authenticated user. Supports pagination and filtering by status and severity.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Query Parameters:**
+- `page` (number, optional): Page number for pagination (default: 1)
+- `limit` (number, optional): Number of results per page (default: 10)
+- `status` (string, optional): Filter by status (`open`, `in_progress`, `resolved`, `closed`)
+- `severity` (string, optional): Filter by severity (`low`, `medium`, `high`, `critical`)
+
+**Example Request:**
+```bash
+GET /api/bug-reports/me?page=1&limit=10&status=open&severity=high
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.ulearnandearn.com/api/bug-reports/me?page=1&limit=10&status=open" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Bug reports retrieved successfully",
+  "data": {
+    "user": {
+      "id": "507f191e810c19729de860ea",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "profileImage": "https://..."
+    },
+    "bugReports": [
+      {
+        "id": "507f1f77bcf86cd799439011",
+        "userId": "507f191e810c19729de860ea",
+        "user": {
+          "id": "507f191e810c19729de860ea",
+          "firstName": "John",
+          "lastName": "Doe",
+          "name": "John Doe",
+          "email": "john@example.com",
+          "profileImage": "https://..."
+        },
+        "title": "App crashes when uploading video",
+        "description": "The app crashes when uploading videos longer than 30 seconds",
+        "severity": "high",
+        "status": "open",
+        "deviceInfo": "iPhone 13",
+        "browserInfo": "Safari 17.0",
+        "osInfo": "iOS 17.2",
+        "appVersion": "1.0.0",
+        "stepsToReproduce": "1. Open app\n2. Tap on create post\n3. Select video longer than 30 seconds\n4. App crashes",
+        "expectedBehavior": "Video should upload successfully",
+        "actualBehavior": "App crashes immediately",
+        "attachments": [],
+        "adminResponse": null,
+        "resolvedAt": null,
+        "createdAt": "2024-01-01T12:00:00.000Z",
+        "updatedAt": "2024-01-01T12:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 1,
+      "totalReports": 1,
+      "hasNextPage": false,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+**Response Fields:**
+- `bugReports` (array): Array of bug report objects
+- `pagination` (object): Pagination information
+  - `currentPage` (number): Current page number
+  - `totalPages` (number): Total number of pages
+  - `totalReports` (number): Total number of bug reports
+  - `hasNextPage` (boolean): Whether there are more pages
+  - `hasPrevPage` (boolean): Whether there are previous pages
+
+**Error Responses:**
+- `401`: Not authenticated
+- `500`: Failed to retrieve bug reports
+
+**Notes:**
+- Results are sorted by creation date (newest first)
+- Only returns bug reports submitted by the authenticated user
+- Filtering by status and severity is optional
+
+---
+
+### 64. Get Bug Report by ID
+
+**Method:** `GET`  
+**URL:** `/api/bug-reports/:id`  
+**Authentication:** Required
+
+**Description:**  
+Retrieve a specific bug report by its ID. Users can only view their own bug reports.
+
+**Path Parameters:**
+- `id` (string, required): Bug report ID
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Example Request:**
+```bash
+GET /api/bug-reports/507f1f77bcf86cd799439011
+```
+
+**Example using cURL:**
+```bash
+curl -X GET "https://api.ulearnandearn.com/api/bug-reports/507f1f77bcf86cd799439011" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Bug report retrieved successfully",
+  "data": {
+    "bugReport": {
+      "id": "507f1f77bcf86cd799439011",
+      "userId": "507f191e810c19729de860ea",
+      "user": {
+        "id": "507f191e810c19729de860ea",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "profileImage": "https://..."
+      },
+      "title": "App crashes when uploading video",
+      "description": "The app crashes when uploading videos longer than 30 seconds",
+      "severity": "high",
+      "status": "open",
+      "deviceInfo": "iPhone 13",
+      "browserInfo": "Safari 17.0",
+      "osInfo": "iOS 17.2",
+      "appVersion": "1.0.0",
+      "stepsToReproduce": "1. Open app\n2. Tap on create post\n3. Select video longer than 30 seconds\n4. App crashes",
+      "expectedBehavior": "Video should upload successfully",
+      "actualBehavior": "App crashes immediately",
+      "attachments": [
+        {
+          "url": "https://cloudinary.com/image.jpg",
+          "type": "image"
+        }
+      ],
+      "adminResponse": "Thank you for reporting this issue. We've identified the problem and are working on a fix. Expected resolution: Next update.",
+      "resolvedAt": null,
+      "createdAt": "2024-01-01T12:00:00.000Z",
+      "updatedAt": "2024-01-01T12:00:00.000Z"
+    }
+  }
+}
+```
+
+**Response Fields:**
+- `bugReport` (object): Bug report object with all details
+  - `adminResponse` (string|null): Response from admin/developer (if available)
+  - `resolvedAt` (date|null): Date when bug was resolved (if resolved)
+
+**Error Responses:**
+- `400`: Invalid bug report ID
+- `401`: Not authenticated
+- `403`: You do not have permission to view this bug report (not your bug report)
+- `404`: Bug report not found
+- `500`: Failed to retrieve bug report
+
+**Notes:**
+- Users can only view their own bug reports
+- `adminResponse` and `resolvedAt` are populated by administrators/developers
+- Bug reports are stored in the `bugreports` collection in the same database cluster
 
 ---
 

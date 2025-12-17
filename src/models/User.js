@@ -201,7 +201,19 @@ const userSchema = new mongoose.Schema({
     blockedUsers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
-    }]
+    }],
+    generalWeightage: {
+        type: Number,
+        default: 0
+    },
+    professionalWeightage: {
+        type: Number,
+        default: 0
+    },
+    token: {
+        type: String,
+        default: null
+    }
 }, {
     timestamps: true
 });

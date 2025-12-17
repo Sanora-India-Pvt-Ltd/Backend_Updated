@@ -471,6 +471,24 @@ try {
     });
 }
 
+// Bug Report routes - for reporting bugs
+try {
+    console.log('🔄 Loading bug report routes...');
+    app.use('/api/bug-reports', require('./routes/bugReportRoutes'));
+    console.log('✅ Bug report routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading bug report routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/bug-reports', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Bug report routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');
