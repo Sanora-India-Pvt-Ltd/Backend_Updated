@@ -270,7 +270,17 @@ const signup = async (req, res) => {
         user.auth.refreshToken = refreshToken;
         user.auth.refreshTokenExpiry = refreshTokenExpiry;
 
-        await user.save();
+        // Use findByIdAndUpdate to avoid pre-hook issues during signup
+        await User.findByIdAndUpdate(
+            user._id,
+            {
+                $set: {
+                    'auth.tokens.refreshTokens': user.auth.tokens.refreshTokens,
+                    'auth.refreshToken': refreshToken,
+                    'auth.refreshTokenExpiry': refreshTokenExpiry
+                }
+            }
+        );
 
         res.status(201).json({
             success: true,
@@ -346,7 +356,6 @@ const login = async (req, res) => {
 
         // Find user by email or phone number
         // Support both old flat structure and new nested structure for backward compatibility
-        // Use lean() to get plain object - ensures all fields are accessible
         let user;
         if (email) {
             const normalizedEmail = email.toLowerCase();
@@ -357,7 +366,7 @@ const login = async (req, res) => {
                     { 'profile.email': normalizedEmail },
                     { email: normalizedEmail }
                 ]
-            }).lean(); // Use lean() to get plain JavaScript object
+            });
             console.log('   Query result:', user ? `Found (ID: ${user._id})` : 'Not found');
         } else if (phoneNumber) {
             console.log('🔍 Searching for user with phone:', phoneNumber);
@@ -367,7 +376,7 @@ const login = async (req, res) => {
                     { 'profile.phoneNumbers.primary': phoneNumber },
                     { phoneNumber: phoneNumber }
                 ]
-            }).lean(); // Use lean() to get plain JavaScript object
+            });
             console.log('   Query result:', user ? `Found (ID: ${user._id})` : 'Not found');
         }
 
@@ -379,31 +388,43 @@ const login = async (req, res) => {
             });
         }
 
+        // Convert to plain object for reliable password access, but keep original document for saving
+        // This ensures all nested fields are accessible even if Mongoose hasn't fully hydrated them
+        const userObj = user.toObject ? user.toObject() : user;
+        
         // Access password from plain object - support both old and new structure
-        // Using lean() ensures all fields are accessible as plain JavaScript properties
         let userPassword = null;
         
         // Try new nested structure first
-        if (user.auth && user.auth.password) {
-            userPassword = user.auth.password;
+        if (userObj.auth && userObj.auth.password) {
+            userPassword = userObj.auth.password;
             console.log('✅ Using password from: auth.password (new structure)');
         } 
         // Try old flat structure
-        else if (user.password) {
-            userPassword = user.password;
+        else if (userObj.password) {
+            userPassword = userObj.password;
             console.log('✅ Using password from: password (old structure)');
+        }
+        // Fallback: try accessing directly from document (in case toObject() didn't include it)
+        else if (user.auth && user.auth.password) {
+            userPassword = user.auth.password;
+            console.log('✅ Using password from: user.auth.password (direct access)');
+        } else if (user.password) {
+            userPassword = user.password;
+            console.log('✅ Using password from: user.password (direct access)');
         }
         
         if (!userPassword) {
             console.log('❌ No password field found in user document');
             console.log('   User ID:', user._id);
-            console.log('   Has auth object:', !!user.auth);
-            console.log('   Has auth.password:', !!(user.auth && user.auth.password));
-            console.log('   Has password:', !!user.password);
-            console.log('   User keys:', Object.keys(user).slice(0, 10).join(', '));
+            console.log('   Has auth object:', !!userObj.auth);
+            console.log('   Has auth.password (obj):', !!(userObj.auth && userObj.auth.password));
+            console.log('   Has password (obj):', !!userObj.password);
+            console.log('   Has auth.password (doc):', !!(user.auth && user.auth.password));
+            console.log('   Has password (doc):', !!user.password);
             
             // Check if this is an OAuth user (should not have password)
-            if (user.auth && user.auth.isGoogleOAuth) {
+            if ((userObj.auth && userObj.auth.isGoogleOAuth) || (user.auth && user.auth.isGoogleOAuth)) {
                 return res.status(400).json({
                     success: false,
                     message: 'This account uses Google Sign-In. Please use Google authentication instead.'
@@ -417,8 +438,6 @@ const login = async (req, res) => {
         }
         
         console.log('🔐 Comparing password...');
-        
-        console.log('🔐 Comparing password...');
         const isPasswordValid = await bcrypt.compare(password, userPassword);
         console.log('   Password valid:', isPasswordValid);
         if (!isPasswordValid) {
@@ -428,12 +447,8 @@ const login = async (req, res) => {
             });
         }
 
-        // Update last login - support both structures
-        if (!user.account) user.account = {};
-        user.account.lastLogin = new Date();
-
         // Get user email - support both old and new structure (use userObj for reading)
-        const userEmail = userObj.profile?.email || userObj.email;
+        const userEmail = userObj.profile?.email || userObj.email || user.profile?.email || user.email;
         
         // Generate access token and refresh token
         const accessToken = generateAccessToken({ id: (userObj._id || userObj.id).toString(), email: userEmail });
@@ -476,7 +491,21 @@ const login = async (req, res) => {
         user.refreshToken = refreshToken;
         user.refreshTokenExpiry = refreshTokenExpiry;
 
-        await user.save();
+        // Update user with new tokens and last login using findByIdAndUpdate to avoid pre-hook issues
+        await User.findByIdAndUpdate(
+            user._id,
+            {
+                $set: {
+                    'auth.tokens.refreshTokens': user.auth.tokens.refreshTokens,
+                    'auth.refreshToken': refreshToken,
+                    'auth.refreshTokenExpiry': refreshTokenExpiry,
+                    'refreshToken': refreshToken,
+                    'refreshTokenExpiry': refreshTokenExpiry,
+                    'account.lastLogin': new Date()
+                }
+            },
+            { new: true }
+        );
 
         // Get user data - support both old and new structure
         const userData = {
@@ -502,11 +531,15 @@ const login = async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Error in user login',
-            error: error.message
-        });
+        console.error('Login error:', error);
+        // Only send response if headers haven't been sent
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                message: 'Error in user login',
+                error: error.message
+            });
+        }
     }
 };
 

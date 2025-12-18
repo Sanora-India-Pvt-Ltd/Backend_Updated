@@ -470,26 +470,18 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Pre-save validation hook to ensure either old or new structure has required fields
-userSchema.pre('validate', function(next) {
-    // For OAuth users, skip validation of required fields
-    if (this.auth && this.auth.isGoogleOAuth) {
-        return next();
+// Pre-save hook to update last login and handle authentication token migration
+userSchema.pre('save', async function(next) {
+    try {
+        // Update last login timestamp
+        if (this.account) {
+            this.account.lastLogin = new Date();
+        }
+        
+        next();
+    } catch (error) {
+        next(error);
     }
-    
-    // Check if using new nested structure
-    const hasNewStructure = this.profile && this.profile.email;
-    
-    if (hasNewStructure) {
-        // Using new structure - ensure profile fields are present
-        // Note: Required fields are validated in controllers, not here
-        // This allows OAuth users to be created without all fields
-    } else {
-        // Using old structure - ensure old fields are present
-        // Note: Required fields are validated in controllers, not here
-    }
-    
-    next();
 });
 
 // Index for email lookup (support both structures)

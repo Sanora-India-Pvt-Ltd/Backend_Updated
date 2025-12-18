@@ -1,4 +1,9 @@
 const errorHandler = (err, req, res, next) => {
+    // If response was already sent, don't try to send again
+    if (res.headersSent) {
+        return next(err);
+    }
+
     console.error(err.stack);
 
     const statusCode = err.statusCode || 500;
