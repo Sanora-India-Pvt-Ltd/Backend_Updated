@@ -346,6 +346,7 @@ const login = async (req, res) => {
 
         // Find user by email or phone number
         // Support both old flat structure and new nested structure for backward compatibility
+        // Use lean() to get plain object - ensures all fields are accessible
         let user;
         if (email) {
             const normalizedEmail = email.toLowerCase();
@@ -356,7 +357,7 @@ const login = async (req, res) => {
                     { 'profile.email': normalizedEmail },
                     { email: normalizedEmail }
                 ]
-            });
+            }).lean(); // Use lean() to get plain JavaScript object
             console.log('   Query result:', user ? `Found (ID: ${user._id})` : 'Not found');
         } else if (phoneNumber) {
             console.log('🔍 Searching for user with phone:', phoneNumber);
@@ -366,7 +367,7 @@ const login = async (req, res) => {
                     { 'profile.phoneNumbers.primary': phoneNumber },
                     { phoneNumber: phoneNumber }
                 ]
-            });
+            }).lean(); // Use lean() to get plain JavaScript object
             console.log('   Query result:', user ? `Found (ID: ${user._id})` : 'Not found');
         }
 
@@ -378,30 +379,44 @@ const login = async (req, res) => {
             });
         }
 
-        console.log('✅ User found:', user._id);
-        console.log('   User structure check - auth.password:', !!user.auth?.password, 'password:', !!user.password);
-        console.log('   User email:', user.profile?.email || user.email);
-        console.log('   User keys:', Object.keys(user).slice(0, 10).join(', '));
-
-        // Check password - support both old and new structure
-        let userPassword;
-        if (user.auth?.password) {
-            // New nested structure
+        // Access password from plain object - support both old and new structure
+        // Using lean() ensures all fields are accessible as plain JavaScript properties
+        let userPassword = null;
+        
+        // Try new nested structure first
+        if (user.auth && user.auth.password) {
             userPassword = user.auth.password;
-            console.log('   Using password from: auth.password (new structure)');
-        } else if (user.password) {
-            // Old flat structure
+            console.log('✅ Using password from: auth.password (new structure)');
+        } 
+        // Try old flat structure
+        else if (user.password) {
             userPassword = user.password;
-            console.log('   Using password from: password (old structure)');
-            console.log('   Password hash preview:', userPassword ? userPassword.substring(0, 20) + '...' : 'null');
-        } else {
+            console.log('✅ Using password from: password (old structure)');
+        }
+        
+        if (!userPassword) {
             console.log('❌ No password field found in user document');
-            console.log('   Available fields:', Object.keys(user).join(', '));
+            console.log('   User ID:', user._id);
+            console.log('   Has auth object:', !!user.auth);
+            console.log('   Has auth.password:', !!(user.auth && user.auth.password));
+            console.log('   Has password:', !!user.password);
+            console.log('   User keys:', Object.keys(user).slice(0, 10).join(', '));
+            
+            // Check if this is an OAuth user (should not have password)
+            if (user.auth && user.auth.isGoogleOAuth) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'This account uses Google Sign-In. Please use Google authentication instead.'
+                });
+            }
+            
             return res.status(400).json({
                 success: false,
                 message: 'Invalid email/phone number or password'
             });
         }
+        
+        console.log('🔐 Comparing password...');
         
         console.log('🔐 Comparing password...');
         const isPasswordValid = await bcrypt.compare(password, userPassword);
@@ -417,11 +432,11 @@ const login = async (req, res) => {
         if (!user.account) user.account = {};
         user.account.lastLogin = new Date();
 
-        // Get user email - support both old and new structure
-        const userEmail = user.profile?.email || user.email;
+        // Get user email - support both old and new structure (use userObj for reading)
+        const userEmail = userObj.profile?.email || userObj.email;
         
         // Generate access token and refresh token
-        const accessToken = generateAccessToken({ id: user._id, email: userEmail });
+        const accessToken = generateAccessToken({ id: (userObj._id || userObj.id).toString(), email: userEmail });
         const { token: refreshToken, expiryDate: refreshTokenExpiry } = generateRefreshToken();
 
         // Get device info from request (optional)
@@ -1000,16 +1015,21 @@ const refreshToken = async (req, res) => {
             });
         }
 
-        // Find user by refresh token (check both old single token and new array)
-        // Support both old flat structure and new nested structure
+        // Find user by refresh token (check all possible structures)
+        // Support: auth.refreshToken, auth.tokens.refreshToken, auth.tokens.refreshTokens[], refreshToken (old), refreshTokens[] (old)
         let user = await User.findOne({ 'auth.refreshToken': refreshToken });
         
-        // If not found in new structure, check old flat structure
+        // If not found, check auth.tokens.refreshToken (singular in tokens object)
+        if (!user) {
+            user = await User.findOne({ 'auth.tokens.refreshToken': refreshToken });
+        }
+        
+        // If not found, check old flat structure
         if (!user) {
             user = await User.findOne({ refreshToken: refreshToken });
         }
         
-        // If not found in single token field, check refreshTokens array (new structure)
+        // If not found, check refreshTokens array (new structure)
         if (!user) {
             user = await User.findOne({ 'auth.tokens.refreshTokens.token': refreshToken });
         }
@@ -1033,18 +1053,21 @@ const refreshToken = async (req, res) => {
             });
         }
 
-        // Check if token exists in refreshTokens array - support both structures
+        // Check if token exists - support all structures
         let tokenRecord = null;
         if (user.auth?.tokens?.refreshTokens && Array.isArray(user.auth.tokens.refreshTokens)) {
-            // New nested structure
+            // New nested structure - array
             tokenRecord = user.auth.tokens.refreshTokens.find(rt => rt.token === refreshToken);
         } else if (Array.isArray(user.refreshTokens)) {
-            // Old flat structure
+            // Old flat structure - array
             tokenRecord = user.refreshTokens.find(rt => (rt.token || rt) === refreshToken);
         }
 
-        // Fallback to single token field for backward compatibility
-        const singleToken = user.auth?.refreshToken || user.refreshToken;
+        // Check all possible single token fields
+        const singleToken = user.auth?.refreshToken || 
+                           user.auth?.tokens?.refreshToken || 
+                           user.refreshToken;
+        
         if (!tokenRecord && singleToken === refreshToken) {
             // Token found in single field - it's valid (no expiry check)
             // Note: We no longer check expiry date - tokens only expire on explicit logout

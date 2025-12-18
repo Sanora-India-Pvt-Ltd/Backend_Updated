@@ -78,12 +78,23 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        // Find user by refresh token (check both old single token and new array)
+        // Find user by refresh token (check all possible structures)
+        // Support: auth.refreshToken, auth.tokens.refreshToken, auth.tokens.refreshTokens[]
         let user = await User.findOne({ 'auth.refreshToken': refreshToken });
         
-        // If not found in single token field, check refreshTokens array
+        // If not found, check auth.tokens.refreshToken (singular in tokens object)
+        if (!user) {
+            user = await User.findOne({ 'auth.tokens.refreshToken': refreshToken });
+        }
+        
+        // If not found, check refreshTokens array
         if (!user) {
             user = await User.findOne({ 'auth.tokens.refreshTokens.token': refreshToken });
+        }
+        
+        // If not found, check old flat structure
+        if (!user) {
+            user = await User.findOne({ refreshToken: refreshToken });
         }
 
         if (!user) {
@@ -93,14 +104,19 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        // Check if token exists in refreshTokens array
+        // Check if token exists - support all structures
         let tokenRecord = null;
         if (user.auth?.tokens?.refreshTokens && Array.isArray(user.auth.tokens.refreshTokens)) {
             tokenRecord = user.auth.tokens.refreshTokens.find(rt => rt.token === refreshToken);
         }
 
+        // Check all possible single token fields
+        const singleToken = user.auth?.refreshToken || 
+                           user.auth?.tokens?.refreshToken || 
+                           user.refreshToken;
+
         // Fallback to single token field for backward compatibility
-        if (!tokenRecord && user.auth?.refreshToken === refreshToken) {
+        if (!tokenRecord && singleToken === refreshToken) {
             // Token found in single field - it's valid (no expiry check)
             // Tokens only expire when user explicitly logs out
         } else if (tokenRecord) {

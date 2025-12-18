@@ -38,7 +38,7 @@ Authorization: Bearer <access_token>
 ### 1. Send Email OTP for Signup
 **Endpoint:** `POST /api/auth/send-otp-signup`
 
-**Description:** Send OTP to email address for signup verification.
+**Description:** Send OTP to email address for signup verification. Email is automatically normalized (trimmed and lowercased) before checking if user already exists.
 
 **Request Body:**
 ```json
@@ -47,17 +47,26 @@ Authorization: Bearer <access_token>
 }
 ```
 
+**Note:** 
+- Email is automatically trimmed (whitespace removed) and converted to lowercase
+- If a user already exists with this email, an error will be returned
+- Empty emails after trimming will be rejected
+
 **Response:**
 ```json
 {
   "success": true,
-  "message": "OTP sent successfully",
+  "message": "OTP sent successfully to your email",
   "data": {
     "email": "user@example.com",
     "expiresAt": "2024-01-01T12:00:00.000Z"
   }
 }
 ```
+
+**Error Responses:**
+- `400`: Email is required, email cannot be empty, user already exists with this email
+- `503`: Email service is not configured
 
 ---
 
@@ -88,12 +97,20 @@ Authorization: Bearer <access_token>
 ### 3. Send Phone OTP for Signup
 **Endpoint:** `POST /api/auth/send-phone-otp-signup`
 
+**Description:** Send OTP to phone number for signup verification. Phone number is automatically normalized (trimmed, spaces/dashes/parentheses removed, and `+` prefix added if missing) before checking if user already exists.
+
 **Request Body:**
 ```json
 {
-  "phoneNumber": "+1234567890"
+  "phone": "+1234567890"
 }
 ```
+
+**Note:** 
+- Phone number is automatically normalized: whitespace, dashes, and parentheses are removed
+- If phone doesn't start with `+`, it's automatically added
+- System checks for existing users with both `+prefix` and `prefix` formats
+- If a user already exists with this phone number, an error will be returned
 
 **Response:**
 ```json
@@ -102,34 +119,50 @@ Authorization: Bearer <access_token>
   "message": "OTP sent successfully to your phone",
   "data": {
     "phone": "+1234567890",
-    "sid": "verification_sid"
+    "sid": "verification_sid",
+    "status": "pending"
   }
 }
 ```
+
+**Error Responses:**
+- `400`: Phone number is required, phone number is already registered
+- `500`: Twilio is not configured for phone OTP, invalid phone number format
 
 ---
 
 ### 4. Verify Phone OTP for Signup
 **Endpoint:** `POST /api/auth/verify-phone-otp-signup`
 
+**Description:** Verify phone OTP code for signup. Phone number is normalized the same way as in send-phone-otp-signup.
+
 **Request Body:**
 ```json
 {
-  "phoneNumber": "+1234567890",
+  "phone": "+1234567890",
   "otp": "123456"
 }
 ```
+
+**Note:** 
+- Phone number normalization matches the send-phone-otp-signup endpoint
+- If a user already exists with this phone number, an error will be returned
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "Phone verified successfully",
+  "message": "Phone OTP verified successfully. You can now complete signup.",
   "data": {
-    "phoneVerificationToken": "jwt_token_here"
+    "phoneVerificationToken": "jwt_token_here",
+    "phone": "+1234567890"
   }
 }
 ```
+
+**Error Responses:**
+- `400`: Phone number and OTP code are required, invalid or expired OTP code, phone number is already registered
+- `500`: Twilio is not configured, invalid phone number format
 
 ---
 
@@ -1059,7 +1092,12 @@ All endpoints follow a consistent error response format:
    - Can be created by providing name (string) or ID (ObjectId)
    - If name doesn't exist, custom entry is automatically created
 
-5. **Phone Number Format:**
-   - Phone numbers are normalized to include `+` prefix
+5. **Email and Phone Number Normalization:**
+   - **Email:** Automatically trimmed (whitespace removed) and converted to lowercase before validation
+   - **Phone Number:** Automatically normalized:
+     - Whitespace, dashes, and parentheses are removed
+     - `+` prefix is added if missing
+     - System checks for existing users with both `+prefix` and `prefix` formats
    - Format: `+[country_code][number]` (e.g., `+1234567890`)
+   - **Important:** OTPs will not be sent if email/phone is already registered to an existing user
 
