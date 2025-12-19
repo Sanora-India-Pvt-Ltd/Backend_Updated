@@ -12,7 +12,6 @@
    - [Get All Posts](#2-get-all-posts)
    - [Get My Posts](#3-get-my-posts)
    - [Get User Posts](#4-get-user-posts)
-   - [React to Post](#5-react-to-post)
    - [Add Comment to Post](#6-add-comment-to-post)
    - [Delete Comment from Post](#7-delete-comment-from-post)
    - [Report Post](#8-report-post)
@@ -23,11 +22,14 @@
    - [Create Reel with Pre-uploaded Media](#12-create-reel-with-pre-uploaded-media) (Legacy)
    - [Get Reels by Content Type](#13-get-reels-by-content-type)
    - [Get User Reels](#14-get-user-reels)
-   - [React to Reel](#15-react-to-reel)
    - [Add Comment to Reel](#16-add-comment-to-reel)
    - [Delete Comment from Reel](#17-delete-comment-from-reel)
    - [Report Reel](#18-report-reel)
    - [Delete Reel](#19-delete-reel)
+4. [Reactions](#reactions)
+   - [Like/Unlike Post](#likeunlike-post)
+   - [Like/Unlike Reel](#likeunlike-reel)
+   - [Get Reactions](#get-reactions)
 4. [Reactions System](#reactions-system)
 5. [Comments System](#comments-system)
 6. [Blocking System](#blocking-system)
@@ -1330,7 +1332,9 @@ Authorization: Bearer your_access_token_here
 
 ### Overview
 
-The reactions system allows users to express their feelings about posts and reels using 6 different reaction types:
+The reactions system allows users to express their feelings about posts and reels using 6 different reaction types. The system now uses a separate `Like` collection for better performance and scalability.
+
+### Available Reactions
 
 1. **happy** 😊 - Express happiness or joy
 2. **sad** 😢 - Express sadness or empathy
@@ -1339,63 +1343,138 @@ The reactions system allows users to express their feelings about posts and reel
 5. **wow** 😲 - Express surprise or amazement
 6. **like** 👍 - Standard like reaction (default)
 
+### API Endpoints
+
+#### Like/Unlike Post
+**URL:** `POST /api/likes/post/:id`  
+**Authentication:** Required
+
+**Request Body:**
+```json
+{
+  "reaction": "like"  // Optional, defaults to 'like'
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Post liked successfully",
+  "data": {
+    "action": "liked",  // or "unliked" or "reaction_updated"
+    "reaction": "happy",  // null if unliked
+    "likeCount": 42,
+    "isLiked": true
+  }
+}
+```
+
+#### Like/Unlike Reel
+**URL:** `POST /api/likes/reel/:id`  
+**Authentication:** Required
+
+**Request Body:**
+```json
+{
+  "reaction": "happy"  // Optional, defaults to 'like'
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Reel liked successfully",
+  "data": {
+    "action": "liked",  // or "unliked" or "reaction_updated"
+    "reaction": "happy",  // null if unliked
+    "likeCount": 24,
+    "isLiked": true
+  }
+}
+```
+
+#### Get Reactions
+**URL:** `GET /api/likes/:content(post|reel)/:contentId`  
+**Authentication:** Optional
+
+**URL Parameters:**
+- `content`: Either "post" or "reel"
+- `contentId`: ID of the post or reel
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "happy": {
+      "count": 5,
+      "users": [
+        {
+          "id": "user_id_1",
+          "name": "John Doe",
+          "profileImage": "https://..."
+        }
+      ]
+    },
+    "like": {
+      "count": 10,
+      "users": [...]
+    }
+  }
+}
+```
+
 ### Reaction Behavior
 
 - **First Reaction**: When a user reacts for the first time, the reaction is added
 - **Same Reaction Again**: If the user clicks the same reaction again, it removes the reaction (unlike)
 - **Different Reaction**: If the user clicks a different reaction, it updates to the new reaction
 - **One Reaction Per User**: Each user can only have one reaction at a time per post/reel
+- **Performance Optimized**: The system maintains a `likeCount` on posts/reels for quick access
 
-### Reaction Data Structure
+### Data Structure
 
-The likes array is structured as a nested array where each sub-array contains user IDs for a specific reaction type:
-```json
-[
-  [],  // Index 0: happy reactions (user IDs)
-  [],  // Index 1: sad reactions (user IDs)
-  [],  // Index 2: angry reactions (user IDs)
-  [],  // Index 3: hug reactions (user IDs)
-  [],  // Index 4: wow reactions (user IDs)
-  []   // Index 5: like reactions (user IDs)
-]
-```
-
-**Example:**
+#### Post/Reel Model
 ```json
 {
-  "likes": [
-    ["user_id_1", "user_id_2"],  // 2 happy reactions
-    ["user_id_3"],                // 1 sad reaction
-    [],                           // 0 angry reactions
-    [],                           // 0 hug reactions
-    ["user_id_4"],                // 1 wow reaction
-    ["user_id_5", "user_id_6", "user_id_7"]  // 3 like reactions
-  ]
+  "_id": "post_id_123",
+  "likeCount": 15,
+  "comments": [...],
+  "createdAt": "2023-01-01T00:00:00.000Z",
+  "updatedAt": "2023-01-01T00:00:00.000Z"
 }
 ```
 
-### Reaction Counts
+#### Like Model
+```json
+{
+  "_id": "like_id_123",
+  "user": "user_id_1",
+  "content": "post",  // or "reel"
+  "contentId": "post_id_123",
+  "reaction": "happy",
+  "createdAt": "2023-01-01T00:00:00.000Z",
+  "updatedAt": "2023-01-01T00:00:00.000Z"
+}
+```
 
-You can get reaction counts by checking the length of each sub-array:
-```javascript
-const reactionCounts = {
-  happy: likes[0] ? likes[0].length : 0,
-  sad: likes[1] ? likes[1].length : 0,
-  angry: likes[2] ? likes[2].length : 0,
-  hug: likes[3] ? likes[3].length : 0,
-  wow: likes[4] ? likes[4].length : 0,
-  like: likes[5] ? likes[5].length : 0
-};
+### Migration
 
-// Total reactions
-const totalReactions = reactionCounts.happy + reactionCounts.sad + 
-                       reactionCounts.angry + reactionCounts.hug + 
-                       reactionCounts.wow + reactionCounts.like;
+A migration script is available to transfer existing likes to the new system:
 
-// Check if a specific user has reacted
-const userId = "user_id_1";
-const userReaction = likes[0].includes(userId) ? 'happy' :
-                     likes[1].includes(userId) ? 'sad' :
+```bash
+node scripts/migrateLikes.js
+```
+
+### Best Practices
+
+1. **Client-Side Caching**: Cache the user's reaction state locally to provide immediate feedback
+2. **Optimistic Updates**: Update the UI optimistically before the API responds
+3. **Error Handling**: Handle cases where the API call fails and revert UI changes if needed
+4. **Rate Limiting**: Implement client-side rate limiting to prevent spam
+5. **Offline Support**: Queue reactions when offline and sync when back online
                      likes[2].includes(userId) ? 'angry' :
                      likes[3].includes(userId) ? 'hug' :
                      likes[4].includes(userId) ? 'wow' :
@@ -1798,12 +1877,69 @@ Each report contains:
 }
 ```
 
+## User Reports
+
+### Report a User
+
+**Endpoint:** `POST /api/reports/users/:userId/report`  
+**Authentication:** Required  
+**Rate Limit:** 5 reports per minute per user
+
+Report a user for violating community guidelines. Each user can only report another user once.
+
+**Request Body:**
+```json
+{
+  "reason": "bullying_harassment",
+  "description": "User is sending abusive messages"
+}
+```
+
+**Available Report Reasons:**
+- `under_18` - Problem involving someone under 18
+- `bullying_harassment` - Bullying, harassment or abuse
+- `suicide_self_harm` - Suicide or self-harm content
+- `violent_content` - Violent, hateful or disturbing content
+- `restricted_items` - Selling or promoting restricted items
+- `adult_content` - Adult content
+- `scam_fraud` - Scam, fraud or false information
+- `fake_profile` - Fake profile
+- `intellectual_property` - Intellectual property violation
+- `other` - Something else
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "Report submitted successfully",
+  "reportId": "report_id_123"
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Missing required fields or invalid reason
+- `401 Unauthorized`: Not authenticated
+- `403 Forbidden`: Cannot report yourself
+- `404 Not Found`: User not found
+- `409 Conflict`: You have already reported this user
+- `429 Too Many Requests`: Rate limit exceeded
+- `500 Internal Server Error`: Server error
+
+**Example Request:**
+```bash
+curl -X POST https://api.ulearnandearn.com/api/reports/users/123456/report \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "bullying_harassment", "description": "User is sending abusive messages"}'
+```
+
 ### Best Practices
 
 1. **Report Accuracy**: Users should select the most appropriate reason for reporting
-2. **Multiple Reports**: The system requires 2 users with the same reason to trigger deletion
-3. **Feed Privacy**: Reported content is only hidden from the reporting user's feed, not from all users
-4. **Content Moderation**: The automatic deletion threshold helps prevent abuse while allowing legitimate moderation
+2. **No Self-Reports**: Users cannot report themselves
+3. **One Report Per User**: Each user can only report another user once
+4. **Provide Details**: Include a description to help with moderation
+5. **Rate Limiting**: Be mindful of the rate limit (5 reports per minute)
 
 ### Example Workflow
 

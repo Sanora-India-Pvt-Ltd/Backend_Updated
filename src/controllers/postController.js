@@ -368,13 +368,44 @@ const getAllPosts = async (req, res) => {
             .skip(skip)
             .limit(limit * 2); // Get more posts to account for filtering
 
-        // Filter posts based on privacy settings
+        // Get all post IDs to fetch like counts in a single query
+        const postIds = posts.map(post => post._id);
+        const likeCounts = await Like.aggregate([
+            { 
+                $match: { 
+                    content: 'post',
+                    contentId: { $in: postIds }
+                }
+            },
+            {
+                $project: {
+                    contentId: 1,
+                    totalLikes: {
+                        $reduce: {
+                            input: "$likes",
+                            initialValue: 0,
+                            in: { $add: ["$$value", { $size: "$$this" }] }
+                        }
+                    }
+                }
+            }
+        ]);
+
+        // Create a map of postId to like count
+        const likesMap = new Map();
+        likeCounts.forEach(item => {
+            likesMap.set(item.contentId.toString(), item.totalLikes);
+        });
+
+        // Filter posts based on privacy settings and add like counts
         const visiblePosts = [];
         for (const post of posts) {
             const postUserId = post.userId._id ? post.userId._id : post.userId;
             const isVisible = await isPostVisible(postUserId, userId);
             
             if (isVisible) {
+                // Add like count to the post
+                post.likeCount = likesMap.get(post._id.toString()) || 0;
                 visiblePosts.push(post);
                 // Stop once we have enough posts
                 if (visiblePosts.length >= limit) break;

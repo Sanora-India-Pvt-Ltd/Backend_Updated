@@ -1021,11 +1021,11 @@ const toggleLikeReel = async (req, res) => {
                     likeCount: reel.likeCount,
                     commentCount: reel.commentCount,
                     createdAt: reel.createdAt,
-                    updatedAt: reel.updatedAt
-                },
-                action: action,
-                reaction: currentReaction,
-                isLiked: action !== 'unliked'
+                    updatedAt: reel.updatedAt,
+                    action: action,
+                    reaction: currentReaction,
+                    isLiked: action !== 'unliked'
+                }
             }
         });
 

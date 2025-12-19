@@ -548,6 +548,40 @@ try {
     });
 }
 
+// User report routes
+try {
+    console.log('🔄 Loading user report routes...');
+    app.use('/api/reports', require('./routes/userReportRoutes'));
+    console.log('✅ User report routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading user report routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/reports', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'User report routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+// Like routes - for post and reel reactions
+try {
+    console.log('🔄 Loading like routes...');
+    app.use('/api/likes', require('./routes/likeRoutes'));
+    console.log('✅ Like routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading like routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/likes', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Like routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Friend routes - for friend requests and friendships
 try {
     console.log('🔄 Loading friend routes...');

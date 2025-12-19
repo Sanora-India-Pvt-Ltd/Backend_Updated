@@ -31,12 +31,14 @@ const postSchema = new mongoose.Schema({
             required: false
         }
     }],
-    // Likes structure: [happy[], sad[], angry[], hug[], wow[], like[]]
-    // Each sub-array contains only userIds for that reaction type
+    // Array of arrays for likes - each sub-array represents a reaction type:
+    // 0: happy, 1: sad, 2: angry, 3: hug, 4: wow, 5: like
     likes: {
-        type: [[mongoose.Schema.Types.ObjectId]],
-        default: [[], [], [], [], [], []], // [happy, sad, angry, hug, wow, like]
-        ref: 'User'
+        type: [[{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        }]],
+        default: [[], [], [], [], [], []]  // Initialize with 6 empty arrays
     },
     comments: [{
         userId: {
@@ -61,12 +63,6 @@ const postSchema = new mongoose.Schema({
 // Indexes for better query performance
 postSchema.index({ userId: 1, createdAt: -1 }); // For user posts queries
 postSchema.index({ createdAt: -1 }); // For all posts feed queries
-
-// Virtual for like count (sum of all reactions)
-postSchema.virtual('likeCount').get(function() {
-    if (!this.likes || !Array.isArray(this.likes)) return 0;
-    return this.likes.reduce((total, reactionArray) => total + (reactionArray ? reactionArray.length : 0), 0);
-});
 
 // Virtual for comment count
 postSchema.virtual('commentCount').get(function() {
