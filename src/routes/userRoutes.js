@@ -16,7 +16,8 @@ const {
     blockUser,
     unblockUser,
     listBlockedUsers,
-    updateProfileVisibility
+    updateProfileVisibility,
+    getUserProfileById
 } = require('../controllers/userController');
 const { limitOTPRequests, limitVerifyRequests } = require('../middleware/rateLimiter');
 
@@ -24,6 +25,9 @@ const router = express.Router();
 
 // All routes require authentication
 router.use(protect);
+
+// Get user profile by ID
+router.get('/:userId/profile', getUserProfileById);
 
 // Search users by name
 router.get('/search', searchUsers);

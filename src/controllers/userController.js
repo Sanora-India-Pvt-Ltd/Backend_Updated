@@ -2857,6 +2857,140 @@ const listBlockedUsers = async (req, res) => {
     }
 };
 
+// Get user profile by ID
+const getUserProfileById = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const currentUser = req.user; // The authenticated user making the request
+
+        // Find the target user
+        const user = await User.findById(userId)
+            .select('-password -refreshToken -auth -__v')
+            .populate('professional.workplace.company', 'name isCustom')
+            .populate('professional.education.institution', 'name type city country logo verified isCustom');
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Check if the current user is blocked by the target user
+        const isBlocked = await isUserBlocked(user._id, currentUser._id);
+        if (isBlocked) {
+            return res.status(403).json({
+                success: false,
+                message: 'You are blocked from viewing this profile'
+            });
+        }
+
+        // Check if the target user's profile is private
+        const isPrivate = user.profile?.visibility === 'private';
+        const isFriend = await areFriends(currentUser._id, user._id);
+
+        // If profile is private and users are not friends, return limited profile
+        if (isPrivate && !isFriend && !currentUser.isAdmin) {
+            return res.status(200).json({
+                success: true,
+                message: 'User profile retrieved (limited)',
+                data: {
+                    user: getLimitedProfileData(user),
+                    isPrivate: true
+                }
+            });
+        }
+
+        // Format the response data
+        const formattedWorkplace = (user.professional?.workplace || []).map(work => ({
+            company: work.company ? {
+                id: work.company._id,
+                name: work.company.name,
+                isCustom: work.company.isCustom
+            } : null,
+            position: work.position,
+            startDate: work.startDate,
+            endDate: work.endDate,
+            isCurrent: work.isCurrent
+        }));
+
+        const formattedEducation = (user.professional?.education || []).map(edu => ({
+            institution: edu.institution ? {
+                id: edu.institution._id,
+                name: edu.institution.name,
+                type: edu.institution.type,
+                city: edu.institution.city,
+                country: edu.institution.country,
+                logo: edu.institution.logo,
+                verified: edu.institution.verified,
+                isCustom: edu.institution.isCustom
+            } : null,
+            degree: edu.degree,
+            field: edu.field,
+            startYear: edu.startYear,
+            endYear: edu.endYear
+        }));
+
+        const numberOfFriends = user.social?.friends ? user.social.friends.length : 0;
+
+        // Return full profile data
+        res.status(200).json({
+            success: true,
+            message: 'User profile retrieved successfully',
+            data: {
+                user: {
+                    id: user._id,
+                    profile: {
+                        name: {
+                            first: user.profile?.name?.first,
+                            last: user.profile?.name?.last,
+                            full: user.profile?.name?.full
+                        },
+                        email: isFriend || currentUser._id.equals(user._id) ? user.profile?.email : undefined,
+                        phoneNumbers: isFriend || currentUser._id.equals(user._id) ? {
+                            primary: user.profile?.phoneNumbers?.primary,
+                            alternate: user.profile?.phoneNumbers?.alternate
+                        } : undefined,
+                        gender: user.profile?.gender,
+                        pronouns: user.profile?.pronouns,
+                        dob: user.profile?.dob,
+                        bio: user.profile?.bio,
+                        profileImage: user.profile?.profileImage,
+                        coverPhoto: user.profile?.coverPhoto,
+                        visibility: user.profile?.visibility || 'public'
+                    },
+                    location: {
+                        currentCity: user.location?.currentCity,
+                        hometown: user.location?.hometown
+                    },
+                    social: {
+                        numberOfFriends,
+                        relationshipStatus: user.social?.relationshipStatus
+                    },
+                    professional: {
+                        workplace: formattedWorkplace,
+                        education: formattedEducation
+                    },
+                    account: {
+                        createdAt: user.createdAt,
+                        updatedAt: user.updatedAt,
+                        isActive: user.account?.isActive,
+                        isVerified: user.account?.isVerified
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching user profile',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 // Update profile visibility (public/private)
 const updateProfileVisibility = async (req, res) => {
     try {
@@ -2937,6 +3071,7 @@ module.exports = {
     blockUser,
     unblockUser,
     listBlockedUsers,
-    updateProfileVisibility
+    updateProfileVisibility,
+    getUserProfileById
 };
 
