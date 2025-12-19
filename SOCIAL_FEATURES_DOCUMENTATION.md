@@ -539,6 +539,226 @@ Content-Type: application/json
 
 ---
 
+### 7. Delete Comment## Reporting System
+
+### Report Content
+
+**Endpoint:** `POST /api/reports/:contentType/:contentId`  
+**Authentication:** Required  
+**Content-Type:** `application/json`
+
+Report inappropriate content (posts or reels). Each user can only report a specific piece of content once.
+
+**Path Parameters:**
+- `contentType`: Type of content (`post` or `reel`)
+- `contentId`: ID of the content to report
+
+**Request Body:**
+```json
+{
+  "reason": "inappropriate" | "spam" | "harmful" | "other",
+  "description": "Optional details about the report"
+}
+```
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "Content reported successfully"
+}
+```
+
+**Error Responses:**
+- `400`: Invalid report reason, missing required fields, or content already reported
+- `401`: Not authenticated
+- `403`: Cannot report your own content
+- `404`: Content not found
+- `429`: Too many requests (rate limited)
+- `500`: Internal server error
+
+**Rate Limiting:**
+- 5 reports per minute per user
+
+### Report a User
+
+**Endpoint:** `POST /api/reports/users/:userId`  
+**Authentication:** Required  
+**Content-Type:** `application/json`
+
+Report a user for violating community guidelines. Each user can only report another user once. This is specifically for reporting user accounts, not content.
+
+**Path Parameters:**
+- `userId`: ID of the user to report
+
+**Request Body:**
+```json
+{
+  "reason": "under_18" | "bullying_harassment_abuse" | "suicide_self_harm" | 
+           "violent_hateful_disturbing" | "restricted_items" | "adult_content" | 
+           "scam_fraud_false_info" | "fake_profile" | "intellectual_property" | "other",
+  "description": "Required if reason is 'other', otherwise optional. Provide details about the user's behavior that violates community guidelines."
+}
+```
+
+**Available Report Reasons:**
+- `under_18`: Problem involving someone under 18
+- `bullying_harassment_abuse`: Bullying, harassment or abuse
+- `suicide_self_harm`: Suicide or self-harm
+- `violent_hateful_disturbing`: Violent, hateful or disturbing content
+- `restricted_items`: Selling or promoting restricted items
+- `adult_content`: Adult content
+- `scam_fraud_false_info`: Scam, fraud or false information
+- `fake_profile`: Fake profile
+- `intellectual_property`: Intellectual property violation
+- `other`: Something else (requires description)
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "User reported successfully",
+  "data": {
+    "reportId": "report_id_123",
+    "reportedUser": "user_id_456",
+    "reason": "bullying_harassment_abuse",
+    "description": "User is sending threatening messages",
+    "createdAt": "2024-01-20T10:30:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: 
+  - Missing required fields
+  - Invalid report reason
+  - Missing description when reason is 'other'
+  - Cannot report yourself
+  - User already reported
+- `401`: Not authenticated
+- `403`: Cannot report an admin or moderator
+- `404`: User not found
+- `429`: Too many requests (rate limited)
+- `500`: Internal server error
+
+**Rate Limiting:**
+- 5 reports per minute per user
+
+**Automatic Moderation:**
+- After receiving multiple reports (threshold: 2) for the same reason, the system may take automatic actions such as:
+  - Temporarily suspending the reported user
+  - Flagging for admin review
+  - Restricting certain account features
+
+### Get Report Reasons
+
+**Endpoint:** `GET /api/reports/reasons`  
+**Authentication:** Not required  
+
+Retrieve the list of available report reasons with their labels.
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "reasons": [
+      { "value": "under_18", "label": "Problem involving someone under 18" },
+      { "value": "bullying_harassment_abuse", "label": "Bullying, harassment or abuse" },
+      // ... other reasons
+    ]
+  }
+}
+```
+
+### Get User Reports (Admin Only)
+
+**Endpoint:** `GET /api/admin/reports/users`  
+**Authentication:** Required (Admin)  
+**Query Parameters:**
+- `status`: Filter by status (`pending`, `reviewed`, `resolved`, `dismissed`)
+- `sortBy`: Field to sort by (`createdAt`, `updatedAt`)
+- `sortOrder`: Sort order (`asc` or `desc`)
+- `page`: Page number (default: 1)
+- `limit`: Items per page (default: 20)
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "reports": [
+      {
+        "_id": "report_id_123",
+        "reporter": {
+          "_id": "reporter_id_123",
+          "name": "Reporter Name",
+          "email": "reporter@example.com"
+        },
+        "reportedUser": {
+          "_id": "reported_user_id_456",
+          "name": "Reported User",
+          "email": "reported@example.com"
+        },
+        "reason": "bullying_harassment_abuse",
+        "description": "User is sending threatening messages",
+        "status": "pending",
+        "createdAt": "2024-01-20T10:30:00.000Z",
+        "updatedAt": "2024-01-20T10:30:00.000Z"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "pages": 1
+  }
+}
+```
+
+### Update Report Status (Admin Only)
+
+**Endpoint:** `PATCH /api/admin/reports/:reportId`  
+**Authentication:** Required (Admin)  
+**Content-Type:** `application/json`
+
+Update the status of a user report.
+
+**Path Parameters:**
+- `reportId`: ID of the report to update
+
+**Request Body:**
+```json
+{
+  "status": "reviewed" | "resolved" | "dismissed",
+  "adminNotes": "Optional notes about the resolution"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Report status updated successfully",
+  "data": {
+    "report": {
+      "_id": "report_id_123",
+      "status": "resolved",
+      "adminNotes": "User has been warned and content removed",
+      "updatedAt": "2024-01-20T11:00:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Invalid status or missing required fields
+- `401`: Not authenticated
+- `403`: Not authorized (admin only)
+- `404`: Report not found
+- `500`: Internal server error
+
+**Rate Limiting:**
+- 5 reports per minute per user
+
 ### 7. Delete Comment from Post
 
 **Method:** `DELETE`  
@@ -600,15 +820,254 @@ Content-Type: application/json
 ```
 
 **Report Reasons:**
-- `problem_involving_someone_under_18` - Problem involving someone under 18
-- `bullying_harassment_or_abuse` - Bullying, harassment or abuse
-- `suicide_or_self_harm` - Suicide or self-harm
-- `violent_hateful_or_disturbing_content` - Violent, hateful or disturbing content
+- `under_18` - Problem involving someone under 18
+- `bullying_harassment_abuse` - Bullying, harassment or abuse
+- `suicide_self_harm` - Suicide or self-harm
+- `violent_hateful_disturbing` - Violent, hateful or disturbing content
+- `restricted_items` - Selling or promoting restricted items
 - `adult_content` - Adult content
-- `scam_fraud_or_false_information` - Scam, fraud or false information
+- `scam_fraud_false_info` - Scam, fraud or false information
+- `fake_profile` - Fake profile
 - `intellectual_property` - Intellectual property
-- `political` - Political content
-- `i_dont_want_to_see_this` - I don't want to see this
+- `other` - Something else
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Post reported successfully",
+  "data": {
+    "postDeleted": false
+  }
+}
+```
+
+**Response when post is deleted (2 reports with same reason):**
+```json
+{
+  "success": true,
+  "message": "Post reported and removed due to multiple reports with the same reason",
+  "data": {
+    "postDeleted": true
+  }
+}
+```
+
+**Behavior:**
+- Reported posts are immediately removed from the reporting user's feed
+- Users cannot report their own posts
+- Users cannot report the same post twice
+- When 2 users report with the same reason, the post is permanently deleted
+- All Cloudinary media associated with deleted posts is automatically removed
+
+**Error Responses:**
+- `400`: Invalid post ID, invalid reason, you cannot report your own post, you have already reported this post
+- `401`: Not authenticated
+- `404`: Post not found
+- `500`: Failed to report post
+
+**Example using cURL:**
+```bash
+curl -X POST https://api.ulearnandearn.com/api/posts/post_id_123/report \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "bullying_harassment_or_abuse"}'
+```
+
+---
+
+### 9. Delete Post
+
+**Method:** `DELETE`  
+**URL:** `/api/posts/:id`  
+**Authentication:** Required
+
+**Description:**  
+Delete a post. Only the post owner can delete their own post. This will also delete all associated media from Cloudinary.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**URL Parameters:**
+- `id` (string, required): Post ID
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Post deleted successfully"
+}
+```
+
+**Error Responses:**
+- `400`: Invalid post ID
+- `401`: Not authenticated
+- `403`: You do not have permission to delete this post
+- `404`: Post not found
+- `500`: Failed to delete post
+
+---
+
+## Reels
+
+### 10. Create Reel with Video Upload ⭐ Recommended
+
+**Method:** `POST`  
+**URL:** `/api/reels/create`  
+**Authentication:** Required
+
+**Description:**  
+Create a new reel with video upload in a single API call. This endpoint combines video upload, transcoding, and reel creation in one step. Videos are automatically transcoded to H.264 Baseline Profile 3.1 with yuv420p pixel format and faststart enabled for maximum Android and cross-platform compatibility.
+
+**Content-Type:** `multipart/form-data`
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**Request:**
+- **Field Name:** `media` (file, required): Video file
+  - **File Types:** MP4, MOV, AVI, and other video formats
+  - **Max File Size:** 20MB
+- **Field Name:** `caption` (string, optional): Reel caption (max 2200 characters)
+- **Field Name:** `contentType` (string, required): Content type - must be "education" or "fun"
+- **Field Name:** `visibility` (string, optional): Visibility setting - "public", "followers", or "private" (default: "public")
+
+**Example using cURL:**
+```bash
+curl -X POST https://api.ulearnandearn.com/api/reels/create \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -F "media=@/path/to/video.mp4" \
+  -F "caption=Check out this amazing tutorial! 🎓" \
+  -F "contentType=education" \
+  -F "visibility=public"
+```
+
+**Example using JavaScript (FormData):**
+```javascript
+const formData = new FormData();
+formData.append('media', videoFileInput.files[0]);
+formData.append('caption', 'Check out this amazing tutorial! 🎓');
+formData.append('contentType', 'education');
+formData.append('visibility', 'public');
+
+const response = await fetch('https://api.ulearnandearn.com/api/reels/create', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${accessToken}`
+  },
+  body: formData
+});
+
+const result = await response.json();
+```
+
+**Note:** 
+- Videos are automatically transcoded to H.264 Baseline Profile 3.1 with yuv420p pixel format and faststart enabled for maximum Android and cross-platform compatibility
+- The video file is uploaded to Cloudinary, transcoded if needed, and the reel is created in one step
+- This is the recommended approach as it simplifies the workflow
+
+**Success Response (201):**
+```json
+{
+  "success": true,
+  "message": "Reel created successfully",
+  "data": {
+    "reel": {
+      "id": "reel_id_123",
+      "userId": "user_id_456",
+      "user": {
+        "id": "user_id_456",
+        "firstName": "John",
+        "lastName": "Doe",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "profileImage": "https://..."
+      },
+      "caption": "Check out this amazing tutorial! 🎓",
+      "media": {
+        "url": "https://res.cloudinary.com/...",
+        "publicId": "user_uploads/user_id/reels/abc123",
+        "thumbnailUrl": "https://...",
+        "type": "video",
+        "format": "mp4",
+        "duration": 30.5,
+```
+
+### 7. Delete Comment from Post
+
+**Method:** `DELETE`  
+**URL:** `/api/posts/:id/comment/:commentId`  
+**Authentication:** Required
+
+**Description:**  
+Delete a comment from a post. Only the comment owner or post owner can delete comments.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+```
+
+**URL Parameters:**
+- `id` (string, required): Post ID
+- `commentId` (string, required): Comment ID
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Comment deleted successfully"
+}
+```
+
+**Error Responses:**
+- `400`: Invalid post ID or comment ID
+- `401`: Not authenticated
+- `403`: You do not have permission to delete this comment
+- `404`: Post not found, comment not found
+- `500`: Failed to delete comment
+
+---
+
+### 8. Report Post
+
+**Method:** `POST`  
+**URL:** `/api/posts/:id/report`  
+**Authentication:** Required
+
+**Description:**  
+Report a post for inappropriate content. When a user reports a post, it is immediately removed from their feed. If 2 users report the same post with the same reason, the post is automatically deleted from the database and all associated media is removed from Cloudinary.
+
+**Headers:**
+```
+Authorization: Bearer your_access_token_here
+Content-Type: application/json
+```
+
+**URL Parameters:**
+- `id` (string, required): Post ID
+
+**Request Body:**
+```json
+{
+  "reason": "bullying_harassment_or_abuse"
+}
+```
+
+**Report Reasons:**
+- `under_18` - Problem involving someone under 18
+- `bullying_harassment_abuse` - Bullying, harassment or abuse
+- `suicide_self_harm` - Suicide or self-harm
+- `violent_hateful_disturbing` - Violent, hateful or disturbing content
+- `restricted_items` - Selling or promoting restricted items
+- `adult_content` - Adult content
+- `scam_fraud_false_info` - Scam, fraud or false information
+- `fake_profile` - Fake profile
+- `intellectual_property` - Intellectual property
+- `other` - Something else
 
 **Success Response (200):**
 ```json
@@ -1824,15 +2283,16 @@ The reporting system allows users to report inappropriate posts and reels. The s
 
 Users can report content for the following reasons:
 
-1. **problem_involving_someone_under_18** - Content involving someone under 18
-2. **bullying_harassment_or_abuse** - Bullying, harassment or abuse
-3. **suicide_or_self_harm** - Suicide or self-harm content
-4. **violent_hateful_or_disturbing_content** - Violent, hateful or disturbing content
-5. **adult_content** - Adult content
-6. **scam_fraud_or_false_information** - Scam, fraud or false information
-7. **intellectual_property** - Intellectual property violation
-8. **political** - Political content
-9. **i_dont_want_to_see_this** - User preference (don't want to see this content)
+1. **under_18** - Problem involving someone under 18
+2. **bullying_harassment_abuse** - Bullying, harassment or abuse
+3. **suicide_self_harm** - Suicide or self-harm
+4. **violent_hateful_disturbing** - Violent, hateful or disturbing content
+5. **restricted_items** - Selling or promoting restricted items
+6. **adult_content** - Adult content
+7. **scam_fraud_false_info** - Scam, fraud or false information
+8. **fake_profile** - Fake profile
+9. **intellectual_property** - Intellectual property
+10. **other** - Something else
 
 ### Reporting Behavior
 

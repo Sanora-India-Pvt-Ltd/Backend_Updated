@@ -16,12 +16,12 @@ const userReportSchema = new mongoose.Schema({
     required: true,
     enum: [
       'under_18',
-      'bullying_harassment',
+      'bullying_harassment_abuse',
       'suicide_self_harm',
-      'violent_content',
+      'violent_hateful_disturbing',
       'restricted_items',
       'adult_content',
-      'scam_fraud',
+      'scam_fraud_false_info',
       'fake_profile',
       'intellectual_property',
       'other'
