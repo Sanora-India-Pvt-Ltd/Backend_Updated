@@ -250,7 +250,7 @@ const getFullProfileData = (user) => {
 const updateProfile = async (req, res) => {
     try {
         const user = req.user; // From protect middleware
-        const { firstName, lastName, name, dob, gender, bio, currentCity, hometown, relationshipStatus, workplace: workplaceData, education, coverPhoto } = req.body;
+        const { firstName, lastName, name, dob, gender, bio, currentCity, hometown, relationshipStatus, workplace, education, coverPhoto } = req.body;
 
         // Build update object with only provided fields
         const updateData = {};
@@ -473,11 +473,7 @@ const updateProfile = async (req, res) => {
                 };
                 processedWorkplace.push(processedWork);
             }
-            // Initialize professional object if it doesn't exist
-            if (!updateData.professional) {
-                updateData.professional = {};
-            }
-            updateData.professional.workplace = processedWorkplace;
+            updateData['professional.workplace'] = processedWorkplace;
         }
 
         // Handle education (array of education entries)
@@ -2174,11 +2170,7 @@ const updateLocationAndDetails = async (req, res) => {
                 };
                 processedWorkplace.push(processedWork);
             }
-            // Initialize professional object if it doesn't exist
-            if (!updateData.professional) {
-                updateData.professional = {};
-            }
-            updateData.professional.workplace = processedWorkplace;
+            updateData['professional.workplace'] = processedWorkplace;
         }
 
         // Handle education (array of education entries)

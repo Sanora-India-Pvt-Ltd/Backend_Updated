@@ -1,0 +1,40 @@
+const mongoose = require('mongoose');
+
+const productSchema = new mongoose.Schema({
+    sellerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    title: {
+        type: String,
+        required: true,
+        trim: true,
+        maxlength: 200
+    },
+    description: {
+        type: String,
+        required: false,
+        maxlength: 5000
+    },
+    price: {
+        type: Number,
+        required: true,
+        min: 0
+    },
+    images: [{
+        type: String
+    }],
+    isActive: {
+        type: Boolean,
+        default: true
+    }
+}, {
+    timestamps: true
+});
+
+productSchema.index({ sellerId: 1 });
+productSchema.index({ isActive: 1 });
+
+module.exports = mongoose.model('Product', productSchema);
+

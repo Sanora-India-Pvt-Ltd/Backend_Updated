@@ -539,25 +539,26 @@ Content-Type: application/json
 
 ---
 
-### 7. Delete Comment## Reporting System
+## Reporting System
 
 ### Report Content
 
-**Endpoint:** `POST /api/reports/:contentType/:contentId`  
+**Endpoints:**
+- `POST /api/posts/:id/report`
+- `POST /api/reels/:id/report`
+
 **Authentication:** Required  
 **Content-Type:** `application/json`
 
-Report inappropriate content (posts or reels). Each user can only report a specific piece of content once.
+Report inappropriate posts or reels. Each user can only report a specific piece of content once.
 
 **Path Parameters:**
-- `contentType`: Type of content (`post` or `reel`)
-- `contentId`: ID of the content to report
+- `id`: ID of the post or reel to report
 
 **Request Body:**
 ```json
 {
-  "reason": "inappropriate" | "spam" | "harmful" | "other",
-  "description": "Optional details about the report"
+  "reason": "problem_involving_someone_under_18" | "bullying_harassment_or_abuse" | "suicide_or_self_harm" | "violent_hateful_or_disturbing_content" | "adult_content" | "scam_fraud_or_false_information" | "intellectual_property" | "political" | "i_dont_want_to_see_this"
 }
 ```
 
@@ -570,9 +571,8 @@ Report inappropriate content (posts or reels). Each user can only report a speci
 ```
 
 **Error Responses:**
-- `400`: Invalid report reason, missing required fields, or content already reported
+- `400`: Invalid report reason, missing required fields, content already reported, or cannot report your own content
 - `401`: Not authenticated
-- `403`: Cannot report your own content
 - `404`: Content not found
 - `429`: Too many requests (rate limited)
 - `500`: Internal server error
@@ -582,7 +582,7 @@ Report inappropriate content (posts or reels). Each user can only report a speci
 
 ### Report a User
 
-**Endpoint:** `POST /api/reports/users/:userId`  
+**Endpoint:** `POST /api/reports/users/:userId/report`  
 **Authentication:** Required  
 **Content-Type:** `application/json`
 
@@ -650,114 +650,6 @@ Report a user for violating community guidelines. Each user can only report anot
   - Flagging for admin review
   - Restricting certain account features
 
-### Get Report Reasons
-
-**Endpoint:** `GET /api/reports/reasons`  
-**Authentication:** Not required  
-
-Retrieve the list of available report reasons with their labels.
-
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "reasons": [
-      { "value": "under_18", "label": "Problem involving someone under 18" },
-      { "value": "bullying_harassment_abuse", "label": "Bullying, harassment or abuse" },
-      // ... other reasons
-    ]
-  }
-}
-```
-
-### Get User Reports (Admin Only)
-
-**Endpoint:** `GET /api/admin/reports/users`  
-**Authentication:** Required (Admin)  
-**Query Parameters:**
-- `status`: Filter by status (`pending`, `reviewed`, `resolved`, `dismissed`)
-- `sortBy`: Field to sort by (`createdAt`, `updatedAt`)
-- `sortOrder`: Sort order (`asc` or `desc`)
-- `page`: Page number (default: 1)
-- `limit`: Items per page (default: 20)
-
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "data": {
-    "reports": [
-      {
-        "_id": "report_id_123",
-        "reporter": {
-          "_id": "reporter_id_123",
-          "name": "Reporter Name",
-          "email": "reporter@example.com"
-        },
-        "reportedUser": {
-          "_id": "reported_user_id_456",
-          "name": "Reported User",
-          "email": "reported@example.com"
-        },
-        "reason": "bullying_harassment_abuse",
-        "description": "User is sending threatening messages",
-        "status": "pending",
-        "createdAt": "2024-01-20T10:30:00.000Z",
-        "updatedAt": "2024-01-20T10:30:00.000Z"
-      }
-    ],
-    "total": 1,
-    "page": 1,
-    "pages": 1
-  }
-}
-```
-
-### Update Report Status (Admin Only)
-
-**Endpoint:** `PATCH /api/admin/reports/:reportId`  
-**Authentication:** Required (Admin)  
-**Content-Type:** `application/json`
-
-Update the status of a user report.
-
-**Path Parameters:**
-- `reportId`: ID of the report to update
-
-**Request Body:**
-```json
-{
-  "status": "reviewed" | "resolved" | "dismissed",
-  "adminNotes": "Optional notes about the resolution"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "Report status updated successfully",
-  "data": {
-    "report": {
-      "_id": "report_id_123",
-      "status": "resolved",
-      "adminNotes": "User has been warned and content removed",
-      "updatedAt": "2024-01-20T11:00:00.000Z"
-    }
-  }
-}
-```
-
-**Error Responses:**
-- `400`: Invalid status or missing required fields
-- `401`: Not authenticated
-- `403`: Not authorized (admin only)
-- `404`: Report not found
-- `500`: Internal server error
-
-**Rate Limiting:**
-- 5 reports per minute per user
 
 ### 7. Delete Comment from Post
 
@@ -820,16 +712,15 @@ Content-Type: application/json
 ```
 
 **Report Reasons:**
-- `under_18` - Problem involving someone under 18
-- `bullying_harassment_abuse` - Bullying, harassment or abuse
-- `suicide_self_harm` - Suicide or self-harm
-- `violent_hateful_disturbing` - Violent, hateful or disturbing content
-- `restricted_items` - Selling or promoting restricted items
-- `adult_content` - Adult content
-- `scam_fraud_false_info` - Scam, fraud or false information
-- `fake_profile` - Fake profile
-- `intellectual_property` - Intellectual property
-- `other` - Something else
+- `problem_involving_someone_under_18`
+- `bullying_harassment_or_abuse`
+- `suicide_or_self_harm`
+- `violent_hateful_or_disturbing_content`
+- `adult_content`
+- `scam_fraud_or_false_information`
+- `intellectual_property`
+- `political`
+- `i_dont_want_to_see_this`
 
 **Success Response (200):**
 ```json
@@ -1058,16 +949,15 @@ Content-Type: application/json
 ```
 
 **Report Reasons:**
-- `under_18` - Problem involving someone under 18
-- `bullying_harassment_abuse` - Bullying, harassment or abuse
-- `suicide_self_harm` - Suicide or self-harm
-- `violent_hateful_disturbing` - Violent, hateful or disturbing content
-- `restricted_items` - Selling or promoting restricted items
-- `adult_content` - Adult content
-- `scam_fraud_false_info` - Scam, fraud or false information
-- `fake_profile` - Fake profile
-- `intellectual_property` - Intellectual property
-- `other` - Something else
+- `problem_involving_someone_under_18`
+- `bullying_harassment_or_abuse`
+- `suicide_or_self_harm`
+- `violent_hateful_or_disturbing_content`
+- `adult_content`
+- `scam_fraud_or_false_information`
+- `intellectual_property`
+- `political`
+- `i_dont_want_to_see_this`
 
 **Success Response (200):**
 ```json
@@ -2006,7 +1896,7 @@ The blocking system allows users to block other users, preventing mutual interac
 - **User Reels (`/api/reels/user/:id`)**: Returns `403 Forbidden` with generic message if either user has blocked the other (users cannot see who blocked them)
 
 #### Stories
-- **Friends Stories (`/api/stories/friends`)**: Stories from blocked users are automatically filtered out
+- **Friends Stories (`/api/stories/all`)**: Stories from blocked users are automatically filtered out
 - **User Stories (`/api/stories/user/:id`)**: Returns `403 Forbidden` with generic message if either user has blocked the other (users cannot see who blocked them)
 
 #### Friends System
@@ -2283,16 +2173,15 @@ The reporting system allows users to report inappropriate posts and reels. The s
 
 Users can report content for the following reasons:
 
-1. **under_18** - Problem involving someone under 18
-2. **bullying_harassment_abuse** - Bullying, harassment or abuse
-3. **suicide_self_harm** - Suicide or self-harm
-4. **violent_hateful_disturbing** - Violent, hateful or disturbing content
-5. **restricted_items** - Selling or promoting restricted items
-6. **adult_content** - Adult content
-7. **scam_fraud_false_info** - Scam, fraud or false information
-8. **fake_profile** - Fake profile
-9. **intellectual_property** - Intellectual property
-10. **other** - Something else
+1. **problem_involving_someone_under_18**
+2. **bullying_harassment_or_abuse**
+3. **suicide_or_self_harm**
+4. **violent_hateful_or_disturbing_content**
+5. **adult_content**
+6. **scam_fraud_or_false_information**
+7. **intellectual_property**
+8. **political**
+9. **i_dont_want_to_see_this**
 
 ### Reporting Behavior
 
@@ -2350,19 +2239,19 @@ Report a user for violating community guidelines. Each user can only report anot
 **Request Body:**
 ```json
 {
-  "reason": "bullying_harassment",
+  "reason": "bullying_harassment_abuse",
   "description": "User is sending abusive messages"
 }
 ```
 
 **Available Report Reasons:**
 - `under_18` - Problem involving someone under 18
-- `bullying_harassment` - Bullying, harassment or abuse
-- `suicide_self_harm` - Suicide or self-harm content
-- `violent_content` - Violent, hateful or disturbing content
+- `bullying_harassment_abuse` - Bullying, harassment or abuse
+- `suicide_self_harm` - Suicide or self-harm
+- `violent_hateful_disturbing` - Violent, hateful or disturbing content
 - `restricted_items` - Selling or promoting restricted items
 - `adult_content` - Adult content
-- `scam_fraud` - Scam, fraud or false information
+- `scam_fraud_false_info` - Scam, fraud or false information
 - `fake_profile` - Fake profile
 - `intellectual_property` - Intellectual property violation
 - `other` - Something else
@@ -2390,7 +2279,7 @@ Report a user for violating community guidelines. Each user can only report anot
 curl -X POST https://api.ulearnandearn.com/api/reports/users/123456/report \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"reason": "bullying_harassment", "description": "User is sending abusive messages"}'
+  -d '{"reason": "bullying_harassment_abuse", "description": "User is sending abusive messages"}'
 ```
 
 ### Best Practices

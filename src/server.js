@@ -652,6 +652,95 @@ try {
     });
 }
 
+
+// Marketplace seller routes
+try {
+    console.log('🔄 Loading marketplace seller routes...');
+    app.use('/api/marketplace/seller', require('./routes/marketplace/sellerRoutes'));
+    console.log('✅ Marketplace seller routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading marketplace seller routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/marketplace/seller', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Marketplace seller routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+// Marketplace admin seller routes
+try {
+    console.log('🔄 Loading marketplace admin seller routes...');
+    app.use('/api/marketplace/admin/seller', require('./routes/marketplace/adminSellerRoutes'));
+    console.log('✅ Marketplace admin seller routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading marketplace admin seller routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/marketplace/admin/seller', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Marketplace admin seller routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+// Marketplace product routes
+try {
+    console.log('🔄 Loading marketplace product routes...');
+    app.use('/api/marketplace/products', require('./routes/marketplace/productRoutes'));
+    console.log('✅ Marketplace product routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading marketplace product routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/marketplace/products', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Marketplace product routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+// Marketplace inventory routes
+try {
+    console.log('🔄 Loading marketplace inventory routes...');
+    app.use('/api/marketplace/inventory', require('./routes/marketplace/inventoryRoutes'));
+    console.log('✅ Marketplace inventory routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading marketplace inventory routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/marketplace/inventory', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Marketplace inventory routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+// Marketplace cart routes
+try {
+    console.log('🔄 Loading marketplace cart routes...');
+    app.use('/api/marketplace/cart', require('./routes/marketplace/cartRoutes'));
+    console.log('✅ Marketplace cart routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading marketplace cart routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/marketplace/cart', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Marketplace cart routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
+
+
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');

@@ -58,6 +58,10 @@ Body:
 
 Response includes an expiration time.
 
+Common errors:
+- `400` invalid email or already registered
+- `429` too many attempts
+
 ### 2) Verify Email OTP
 POST `/api/auth/verify-otp-signup`
 
@@ -79,6 +83,9 @@ Response:
 }
 ```
 
+Notes:
+- The token is required in the final signup request.
+
 ### 3) Send Phone OTP
 POST `/api/auth/send-phone-otp-signup`
 
@@ -88,6 +95,10 @@ Body:
   "phone": "+1234567890"
 }
 ```
+
+Common errors:
+- `400` invalid phone
+- `429` too many attempts
 
 ### 4) Verify Phone OTP
 POST `/api/auth/verify-phone-otp-signup`
@@ -109,6 +120,9 @@ Response:
   }
 }
 ```
+
+Notes:
+- The token is required in the final signup request.
 
 ### 5) Complete Signup
 POST `/api/auth/signup`
@@ -151,6 +165,7 @@ Response:
 Notes:
 - Email and phone are normalized (trimmed, lowercased for email, and plus-prefixed for phone).
 - OTP verification is required for both email and phone before signup.
+- On success, tokens are returned and should be stored client-side.
 
 ## Login
 POST `/api/auth/login`
@@ -173,6 +188,28 @@ Body (phone login):
 
 Response includes `accessToken`, `refreshToken`, and a `user` object.
 
+Success response example:
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "accessToken": "jwt_access_token",
+    "refreshToken": "refresh_token_string",
+    "user": {
+      "id": "user_id",
+      "email": "user@example.com",
+      "name": "John Doe"
+    }
+  }
+}
+```
+
+Common errors:
+- `400` missing credentials
+- `401` invalid credentials
+- `403` account inactive or blocked
+
 ## Refresh Access Token
 POST `/api/auth/refresh-token`
 
@@ -193,6 +230,9 @@ Response:
 }
 ```
 
+Notes:
+- Access tokens are short-lived; refresh tokens are per device.
+
 ## Logout
 POST `/api/auth/logout` (protected)
 
@@ -212,10 +252,36 @@ Or:
 
 If no body is provided, all devices are logged out.
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "Logged out successfully"
+}
+```
+
 ## Devices
 GET `/api/auth/devices` (protected)
 
 Returns a list of devices and a 1-based `deviceId` for logout calls.
+
+Success response example:
+```json
+{
+  "success": true,
+  "data": {
+    "devices": [
+      {
+        "deviceId": 1,
+        "device": "Chrome on Windows",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "expiresAt": "2025-02-01T00:00:00.000Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
 
 ## Password Reset Flow
 
@@ -235,6 +301,9 @@ Body (phone):
   "phone": "+1234567890"
 }
 ```
+
+Notes:
+- Works for either email or phone.
 
 ### 2) Verify OTP
 POST `/api/auth/forgot-password/verify-otp`
@@ -261,12 +330,42 @@ Body:
 }
 ```
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "Password reset successful"
+}
+```
+
 ## Profile and Account
 
 ### Get Current Profile
 GET `/api/auth/profile` (protected)
 
 Returns the full profile object with profile, location, social, professional, content, and account metadata.
+
+Success response example (trimmed):
+```json
+{
+  "success": true,
+  "data": {
+    "profile": {
+      "name": { "full": "John Doe" },
+      "email": "user@example.com",
+      "profileImage": "https://..."
+    },
+    "account": {
+      "isActive": true,
+      "isVerified": false
+    },
+    "social": {
+      "friends": [],
+      "blockedUsers": []
+    }
+  }
+}
+```
 
 ### Update Profile (Full)
 PUT `/api/user/profile` (protected)
@@ -306,6 +405,10 @@ Body (all optional, arrays replace full arrays):
 }
 ```
 
+Notes:
+- Arrays replace existing arrays; send the full array each time.
+- Use `null` for open-ended dates if supported (e.g., `endDate`).
+
 ### Update Profile Visibility
 PUT `/api/user/profile/visibility` (protected)
 
@@ -313,6 +416,14 @@ Body:
 ```json
 {
   "visibility": "public"
+}
+```
+
+Success response:
+```json
+{
+  "success": true,
+  "message": "Profile visibility updated successfully"
 }
 ```
 
@@ -342,24 +453,36 @@ Body:
 }
 ```
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "Phone number updated successfully"
+}
+```
+
 ## Media Uploads (Profile and User Media)
 
-POST `/api/upload/profile-image` (protected, multipart/form-data)
+POST `/api/media/profile-image` (protected, multipart/form-data)
 - Field: `profileImage`
 
-POST `/api/upload/cover-photo` (protected, multipart/form-data)
+POST `/api/media/cover-photo` (protected, multipart/form-data)
 - Field: `coverPhoto`
 
-POST `/api/upload/upload` (protected, multipart/form-data)
+POST `/api/media/upload` (protected, multipart/form-data)
 - Field: `media`
 
-GET `/api/upload/my-media` (protected)
+GET `/api/media/my-media` (protected)
 
-GET `/api/upload/my-images` (protected)
+GET `/api/media/my-images` (protected)
 
-GET `/api/upload/user/:id` (public)
+GET `/api/media/user/:id` (public)
 
-DELETE `/api/upload/:mediaId` (protected)
+DELETE `/api/media/:mediaId` (protected)
+
+Notes:
+- Use `multipart/form-data` for all uploads.
+- Return payloads include a `url` and `publicId` (Cloudinary).
 
 ## Institutions and Companies
 
@@ -394,3 +517,5 @@ Body:
 - Refresh tokens are stored per device (max 5 devices).
 - Phone numbers should be sent in `+<country_code><number>` format.
 - For profile updates, arrays (`workplace`, `education`) replace existing arrays.
+- Store `accessToken` in memory or secure storage; avoid localStorage if possible.
+- On 401 from protected endpoints, attempt refresh once, then force logout.

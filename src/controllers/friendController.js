@@ -84,7 +84,7 @@ const sendFriendRequest = async (req, res) => {
         }
 
         // Fetch sender to check friends list
-        const sender = await User.findById(senderId).select('friends');
+        const sender = await User.findById(senderId).select('social.friends');
         if (!sender) {
             return res.status(404).json({
                 success: false,
@@ -93,7 +93,8 @@ const sendFriendRequest = async (req, res) => {
         }
 
         // Check if they are already friends
-        if (sender.friends && sender.friends.some(friendId => friendId.toString() === receiverId)) {
+        const senderFriends = sender.social?.friends || [];
+        if (senderFriends.some(friendId => friendId.toString() === receiverId)) {
             return res.status(400).json({
                 success: false,
                 message: 'You are already friends with this user'
@@ -233,11 +234,11 @@ const acceptFriendRequest = async (req, res) => {
 
         // Update both users' friends arrays
         await User.findByIdAndUpdate(senderId, {
-            $addToSet: { friends: receiverId }
+            $addToSet: { 'social.friends': receiverId }
         });
 
         await User.findByIdAndUpdate(receiverId, {
-            $addToSet: { friends: senderId }
+            $addToSet: { 'social.friends': senderId }
         });
 
         // Update request status
@@ -338,22 +339,22 @@ const listFriends = async (req, res) => {
         // Get user with populated friends
         // Include both nested profile structure and old flat fields for backward compatibility
         const user = await User.findById(userId)
-            .populate('friends', 'profile.name.first profile.name.last profile.name.full profile.profileImage profile.bio firstName lastName name profileImage bio')
-            .select('friends');
+            .populate('social.friends', 'profile.name.first profile.name.last profile.name.full profile.profileImage profile.bio')
+            .select('social.friends');
         
-        // Filter out blocked users from friends list (get from both locations)
-        const blockedUserIds = await getBlockedUserIds(userId);
-        const blockedUserIdsStrings = blockedUserIds.map(id => id.toString());
-        const filteredFriends = (user.friends || []).filter(friend => 
-            !blockedUserIdsStrings.includes(friend._id.toString())
-        );
-
         if (!user) {
             return res.status(404).json({
                 success: false,
                 message: 'User not found'
             });
         }
+
+        // Filter out blocked users from friends list (get from both locations)
+        const blockedUserIds = await getBlockedUserIds(userId);
+        const blockedUserIdsStrings = blockedUserIds.map(id => id.toString());
+        const filteredFriends = (user.social?.friends || []).filter(friend => 
+            !blockedUserIdsStrings.includes(friend._id.toString())
+        );
 
         // Map friends to include name, profileImage, bio, and _id
         // Handle both nested profile structure and old flat structure for backward compatibility
@@ -501,7 +502,7 @@ const unfriend = async (req, res) => {
         }
 
         // Check if they are friends
-        const user = await User.findById(userId);
+        const user = await User.findById(userId).select('social.friends');
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -511,7 +512,8 @@ const unfriend = async (req, res) => {
         
         // Convert friendId to string for comparison
         const friendIdStr = friendId.toString();
-        const isFriend = user.friends && user.friends.some(f => f.toString() === friendIdStr);
+        const userFriends = user.social?.friends || [];
+        const isFriend = userFriends.some(f => f.toString() === friendIdStr);
         
         if (!isFriend) {
             return res.status(400).json({
@@ -522,11 +524,11 @@ const unfriend = async (req, res) => {
 
         // Remove from both users' friends arrays
         await User.findByIdAndUpdate(userId, {
-            $pull: { friends: friendId }
+            $pull: { 'social.friends': friendId }
         });
 
         await User.findByIdAndUpdate(friendId, {
-            $pull: { friends: userId }
+            $pull: { 'social.friends': userId }
         });
 
         // Update any accepted friend requests to rejected (optional - for history)
@@ -618,7 +620,7 @@ const getFriendSuggestions = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
 
         // Get current user with friends
-        const user = await User.findById(userId).select('friends');
+        const user = await User.findById(userId).select('social.friends');
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -628,9 +630,11 @@ const getFriendSuggestions = async (req, res) => {
 
         // Get blocked users from both locations
         const blockedUserIds = await getBlockedUserIds(userId);
+        const blockedUserIdStrings = blockedUserIds.map(id => id.toString());
 
         // If user has no friends, return empty suggestions or random users
-        if (!user.friends || user.friends.length === 0) {
+        const userFriends = user.social?.friends || [];
+        if (userFriends.length === 0) {
             // Return random users (excluding current user and blocked users)
             const randomUsers = await User.find({
                 _id: { $ne: userId, $nin: blockedUserIds },
@@ -680,9 +684,9 @@ const getFriendSuggestions = async (req, res) => {
 
         // Get all friends of current user's friends (friends of friends)
         const friendsOfFriends = await User.find({
-            _id: { $in: user.friends }
+            _id: { $in: userFriends }
         })
-        .select('friends')
+        .select('social.friends')
         .lean();
 
         // Build a map of potential friends and their mutual friend count
@@ -691,20 +695,21 @@ const getFriendSuggestions = async (req, res) => {
 
         // Iterate through each friend
         for (const friend of friendsOfFriends) {
-            if (!friend.friends || friend.friends.length === 0) continue;
+            const friendFriends = friend.social?.friends || [];
+            if (friendFriends.length === 0) continue;
 
             // For each friend of this friend
-            for (const friendOfFriendId of friend.friends) {
+            for (const friendOfFriendId of friendFriends) {
                 const friendOfFriendIdStr = friendOfFriendId.toString();
 
                 // Skip if it's the current user
                 if (friendOfFriendIdStr === userIdStr) continue;
 
                 // Skip if already a friend
-                if (user.friends.some(f => f.toString() === friendOfFriendIdStr)) continue;
+                if (userFriends.some(f => f.toString() === friendOfFriendIdStr)) continue;
 
                 // Skip if blocked
-                if (blockedUserIds.includes(friendOfFriendIdStr)) continue;
+                if (blockedUserIdStrings.includes(friendOfFriendIdStr)) continue;
 
                 // Count mutual friends
                 if (!suggestionMap.has(friendOfFriendIdStr)) {

@@ -11,6 +11,12 @@
 3. [Login](#login)
 4. [Get User Details](#get-user-details)
 5. [Update User](#update-user)
+   - [Update Profile](#update-profile)
+   - [Update Profile Visibility](#update-profile-visibility)
+   - [Send OTP for Phone Update](#send-otp-for-phone-update)
+   - [Verify OTP and Update Phone](#verify-otp-and-update-phone)
+   - [Remove Education Entry](#remove-education-entry)
+   - [Remove Workplace Entry](#remove-workplace-entry)
 6. [Access Token & Refresh Token](#access-token--refresh-token)
 7. [Institution](#institution)
 8. [Workplace/Company](#workplacecompany)
@@ -444,6 +450,131 @@ Authorization: Bearer <access_token>
 **Error Responses:**
 - `400`: Invalid field values, validation errors
 - `401`: Not authorized
+
+---
+
+### Update Profile Visibility
+**Endpoint:** `PUT /api/user/profile/visibility`
+
+**Description:** Toggle the user's `profile.visibility` flag between `public` and `private`, letting them control whether the account appears in search results or full-profile views.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "visibility": "public"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Profile visibility updated to public",
+  "data": {
+    "user": {
+      "id": "userId",
+      "profileVisibility": "public"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Missing visibility field or value not `public`/`private`
+- `401`: Not authorized
+- `404`: User not found
+- `500`: Failed to update visibility
+
+---
+
+### Send OTP for Phone Update
+**Endpoint:** `POST /api/user/phone/send-otp`
+
+**Description:** Starts a Twilio Verify v2 flow to send an SMS OTP to the new primary phone number. The number is normalized (spaces/dashes removed, `+` added) before duplicate checks and Twilio validation.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "phoneNumber": "+1234567890"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "OTP sent successfully to your phone",
+  "data": {
+    "phone": "+1234567890",
+    "sid": "VE1234567890abcdef1234567890abcdef",
+    "status": "pending"
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Phone number missing, already registered, or identical to the current primary number
+- `401`: Not authorized
+- `500`: Twilio is not configured or the phone number format is invalid
+
+---
+
+### Verify OTP and Update Phone
+**Endpoint:** `POST /api/user/phone/verify-otp`
+
+**Description:** Validates the OTP from Twilio and, once approved, replaces `profile.phoneNumbers.primary` with the normalized number. Duplicate checks run across both primary and alternate numbers in the database.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "phoneNumber": "+1234567890",
+  "otp": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Phone number updated successfully",
+  "data": {
+    "user": {
+      "id": "userId",
+      "email": "owner@example.com",
+      "firstName": "John",
+      "lastName": "Doe",
+      "name": "John Doe",
+      "dob": "1990-01-01",
+      "phoneNumber": "+1234567890",
+      "alternatePhoneNumber": null,
+      "gender": "Male",
+      "profileImage": "https://.../avatar.jpg",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-02T00:00:00.000Z"
+    }
+  }
+}
+```
+
+**Error Responses:**
+- `400`: Phone number/OTP missing, OTP invalid/expired, or the requested number belongs to another user
+- `401`: Not authorized
+- `500`: Twilio not configured or phone format invalid
 
 ---
 

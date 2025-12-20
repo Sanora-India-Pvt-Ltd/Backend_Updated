@@ -213,32 +213,215 @@ Notes:
 
 ## Friend Requests and Friends
 
+### Data Model Notes (Frontend)
+- Friends are stored on the user under `social.friends` (array of user ids).
+- Blocking removes friendships and cancels any pending requests.
+- Requests are stored in `FriendRequest` with `status: pending | accepted | rejected`.
+
 ### Send Friend Request
 POST `/api/friend/send/:receiverId` (protected)
+
+Success response:
+```json
+{
+  "success": true,
+  "message": "Friend request sent successfully",
+  "data": {
+    "_id": "requestId",
+    "sender": {
+      "_id": "userId",
+      "profile": {
+        "name": { "full": "Alex Chen" },
+        "profileImage": "https://..."
+      }
+    },
+    "receiver": {
+      "_id": "userId",
+      "profile": {
+        "name": { "full": "Sam Patel" },
+        "profileImage": "https://..."
+      }
+    },
+    "status": "pending",
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  }
+}
+```
+
+Common errors:
+- `400` invalid receiver id, self request, already friends, duplicate request
+- `403` blocked (either direction)
+- `404` receiver not found
 
 ### Accept Friend Request
 POST `/api/friend/accept/:requestId` (protected)
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "Friend request accepted successfully",
+  "data": {
+    "_id": "requestId",
+    "status": "accepted",
+    "sender": { "_id": "userId", "profile": { "name": { "full": "Alex Chen" } } },
+    "receiver": { "_id": "userId", "profile": { "name": { "full": "Sam Patel" } } }
+  }
+}
+```
+
+Notes:
+- On success, both users are added to each other in `social.friends`.
+- If request is already processed, server returns `400`.
+
 ### Reject Friend Request
 POST `/api/friend/reject/:requestId` (protected)
+
+Success response:
+```json
+{
+  "success": true,
+  "message": "Friend request rejected successfully",
+  "data": {
+    "_id": "requestId",
+    "status": "rejected"
+  }
+}
+```
 
 ### Cancel Sent Friend Request
 DELETE `/api/friend/cancel/:requestId` (protected)
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "Friend request cancelled successfully"
+}
+```
+
 ### List Friends
 GET `/api/friend/list` (protected)
+
+Success response:
+```json
+{
+  "success": true,
+  "message": "Friends retrieved successfully",
+  "data": {
+    "friends": [
+      {
+        "_id": "userId",
+        "name": "Alex Chen",
+        "profileImage": "https://...",
+        "bio": "Product designer"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+Notes:
+- Blocked users are filtered out.
+- Name and profile image are resolved from either nested profile fields or older flat fields.
 
 ### List Received Requests
 GET `/api/friend/requests/received` (protected)
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "Received friend requests retrieved successfully",
+  "data": {
+    "requests": [
+      {
+        "_id": "requestId",
+        "sender": {
+          "_id": "userId",
+          "profile": {
+            "name": { "full": "Alex Chen" },
+            "profileImage": "https://..."
+          },
+          "location": { "currentCity": "Delhi", "hometown": "Dehradun" }
+        },
+        "status": "pending",
+        "createdAt": "2025-01-01T00:00:00.000Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
 ### List Sent Requests
 GET `/api/friend/requests/sent` (protected)
+
+Success response:
+```json
+{
+  "success": true,
+  "message": "Sent friend requests retrieved successfully",
+  "data": {
+    "requests": [
+      {
+        "_id": "requestId",
+        "receiver": {
+          "_id": "userId",
+          "profile": {
+            "name": { "full": "Sam Patel" },
+            "profileImage": "https://..."
+          },
+          "location": { "currentCity": "Mumbai", "hometown": "Jaipur" }
+        },
+        "status": "pending",
+        "createdAt": "2025-01-01T00:00:00.000Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
 
 ### Unfriend
 DELETE `/api/friend/unfriend/:friendId` (protected)
 
+Success response:
+```json
+{
+  "success": true,
+  "message": "User unfriended successfully"
+}
+```
+
 ### Friend Suggestions
 GET `/api/friend/suggestions?limit=10` (protected)
+
+Success response:
+```json
+{
+  "success": true,
+  "message": "Friend suggestions retrieved successfully",
+  "data": {
+    "suggestions": [
+      {
+        "user": {
+          "_id": "userId",
+          "name": "Alex Chen",
+          "profileImage": "https://...",
+          "bio": "Product designer"
+        },
+        "mutualFriendsCount": 2,
+        "mutualFriends": [
+          { "_id": "userId", "name": "Sam Patel", "profileImage": "https://..." }
+        ]
+      }
+    ],
+    "count": 1
+  }
+}
+```
 
 Notes:
 - Suggestions are based on mutual friends when possible.
@@ -260,3 +443,9 @@ Body:
 - Reaction toggles are idempotent (same reaction removes it).
 - Feeds are filtered by blocking and reporting when authenticated.
 - Use pagination on all list endpoints.
+- Friend request UI states:
+  - No relationship: show "Add friend"
+  - Request sent: show "Requested" + cancel
+  - Request received: show "Accept" / "Reject"
+  - Friends: show "Friends" + unfriend
+- For friend lists and requests, prefer rendering `profile.name.full` with a fallback to derived first+last if available.
