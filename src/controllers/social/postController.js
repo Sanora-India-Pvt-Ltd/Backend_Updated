@@ -219,8 +219,13 @@ const enrichMediaWithTranscodingStatus = async (mediaArray) => {
         // If transcoding is complete, use the transcoded URL (from Media record)
         // The Media record's URL should be the transcoded version after completion
         if (mediaRecord.transcodingCompleted && mediaRecord.url) {
+            // Use transcoded URL from Media record
             enrichedMedia.url = mediaRecord.url;
+            enrichedMedia.publicId = mediaRecord.public_id; // Update publicId to match
             enrichedMedia.isPlayable = true;
+            if (process.env.NODE_ENV === 'development') {
+                console.log(`[PostController] Using transcoded video URL for publicId ${publicId}`);
+            }
         } else if (mediaRecord.isTranscoding) {
             // Still transcoding - return original URL but mark as not playable yet
             enrichedMedia.isPlayable = false;
@@ -457,12 +462,63 @@ const createPost = async (req, res) => {
                                 isTranscoding: false,
                                 transcodingCompleted: true
                             });
+                            console.log(`[PostController] Media record ${mediaRecordId} updated with transcoded URL: ${transcodedUploadResult.url}`);
 
-                            // Update post media array with new URL
-                            await Post.updateOne(
-                                { _id: post._id, 'media.publicId': publicId },
-                                { $set: { 'media.$.url': transcodedUploadResult.url, 'media.$.publicId': transcodedUploadResult.key } }
+                            // Update post media array with new URL - use more reliable method
+                            // First, find the post to verify it exists
+                            const postDoc = await Post.findById(post._id);
+                            if (!postDoc) {
+                                console.error(`[PostController] Post ${post._id} not found for transcoding update`);
+                                throw new Error(`Post ${post._id} not found`);
+                            }
+
+                            // Find the media item index by publicId
+                            const mediaIndex = postDoc.media.findIndex(m => 
+                                (m.publicId && m.publicId === publicId) || 
+                                (m.public_id && m.public_id === publicId)
                             );
+
+                            if (mediaIndex === -1) {
+                                console.error(`[PostController] Media item with publicId ${publicId} not found in Post ${post._id}`);
+                                console.error(`[PostController] Post media array:`, JSON.stringify(postDoc.media.map(m => ({ publicId: m.publicId, public_id: m.public_id }))));
+                                // Try to update using the transcodingJobId as fallback
+                                const fallbackIndex = postDoc.media.findIndex(m => 
+                                    m.transcodingJobId && m.transcodingJobId.toString() === transcodingJobId.toString()
+                                );
+                                if (fallbackIndex !== -1) {
+                                    postDoc.media[fallbackIndex].url = transcodedUploadResult.url;
+                                    postDoc.media[fallbackIndex].publicId = transcodedUploadResult.key;
+                                    postDoc.media[fallbackIndex].isTranscoding = false;
+                                    await postDoc.save();
+                                    console.log(`[PostController] Post updated using fallback method (transcodingJobId match)`);
+                                } else {
+                                    throw new Error(`Media item not found in Post ${post._id} by publicId or transcodingJobId`);
+                                }
+                            } else {
+                                // Update using positional operator with verified index
+                                const updateResult = await Post.updateOne(
+                                    { _id: post._id, [`media.${mediaIndex}.publicId`]: publicId },
+                                    { 
+                                        $set: { 
+                                            [`media.${mediaIndex}.url`]: transcodedUploadResult.url,
+                                            [`media.${mediaIndex}.publicId`]: transcodedUploadResult.key,
+                                            [`media.${mediaIndex}.isTranscoding`]: false
+                                        } 
+                                    }
+                                );
+                                
+                                // If positional operator fails, use direct array update
+                                if (updateResult.matchedCount === 0) {
+                                    console.warn(`[PostController] Positional operator failed, using direct array update`);
+                                    postDoc.media[mediaIndex].url = transcodedUploadResult.url;
+                                    postDoc.media[mediaIndex].publicId = transcodedUploadResult.key;
+                                    postDoc.media[mediaIndex].isTranscoding = false;
+                                    await postDoc.save();
+                                    console.log(`[PostController] Post updated using direct array update`);
+                                } else {
+                                    console.log(`[PostController] Post updated successfully: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
+                                }
+                            }
 
                             // Cleanup transcoded file
                             const { cleanupFile } = require('../../services/videoTranscoder');
