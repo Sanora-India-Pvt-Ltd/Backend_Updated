@@ -1,5 +1,4 @@
-const { DeleteObjectCommand, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { DeleteObjectCommand, PutObjectCommand } = require('@aws-sdk/client-s3');
 const s3 = require('../config/s3');
 const fs = require('fs').promises;
 const path = require('path');
@@ -69,45 +68,16 @@ class StorageService {
         })
       );
 
-      // Generate presigned URL (works for both public and private buckets)
-      // Presigned URLs are valid for 7 days by default
-      const expiresIn = parseInt(process.env.S3_PRESIGNED_URL_EXPIRY) || 7 * 24 * 60 * 60; // 7 days in seconds
-      const command = new GetObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: key
-      });
-      const presignedUrl = await getSignedUrl(s3, command, { expiresIn });
+      // Generate URL (assuming bucket is not public, you may need to use presigned URLs)
+      const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
 
       return {
-        url: presignedUrl,
+        url,
         key,
         provider: 's3'
       };
     } catch (error) {
       console.error(`[StorageService] Failed to upload file from path ${filePath}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Generate a presigned URL for an existing S3 object
-   * @param {string} key - S3 key
-   * @param {number} expiresIn - Expiration time in seconds (default: 7 days)
-   * @returns {Promise<string>} Presigned URL
-   */
-  static async getPresignedUrl(key, expiresIn = null) {
-    if (!key) {
-      throw new Error('Key is required for presigned URL');
-    }
-    try {
-      const expiry = expiresIn || parseInt(process.env.S3_PRESIGNED_URL_EXPIRY) || 7 * 24 * 60 * 60;
-      const command = new GetObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: key
-      });
-      return await getSignedUrl(s3, command, { expiresIn: expiry });
-    } catch (error) {
-      console.error(`[StorageService] Failed to generate presigned URL for key ${key}:`, error);
       throw error;
     }
   }
