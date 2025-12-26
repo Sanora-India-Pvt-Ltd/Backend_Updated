@@ -1,11 +1,11 @@
 const Post = require('../../models/social/Post');
 const Comment = require('../../models/social/Comment');
 const User = require('../../models/authorization/User');
-const cloudinary = require('../../config/cloudinary');
+const StorageService = require('../../services/storage.service');
 const Media = require('../../models/Media');
 const mongoose = require('mongoose');
 const Like = require('../../models/social/Like');
-const { transcodeVideo, isVideo, cleanupFile } = require('../../services/videoTranscoder');
+const { isVideo } = require('../../services/videoTranscoder');
 const { Report, REPORT_REASONS } = require('../../models/social/Report');
 const videoTranscodingQueue = require('../../services/videoTranscodingQueue');
 const VideoTranscodingJob = require('../../models/VideoTranscodingJob');
@@ -314,95 +314,90 @@ const createPost = async (req, res) => {
             });
         }
 
-        // User-specific folder path for post media
-        const userFolder = `user_uploads/${user._id}/posts`;
-
         // Process uploaded files (if any)
         const media = [];
         
         if (hasMedia) {
-            for (const file of files) {
-                let transcodedPath = null;
-                let originalPath = file.path;
-                let fileToUpload = originalPath;
 
+            for (const file of files) {
+                let transcodingJobId = null; // Declare outside try block so it's accessible in catch
                 try {
                     // Check if uploaded file is a video
                     const isVideoFile = isVideo(file.mimetype);
-                    let transcodingJobId = null;
 
-                    // Queue video transcoding job (async processing)
-                    if (isVideoFile) {
-                        try {
-                            console.log('[PostController] Queueing video transcoding job...');
-                            transcodingJobId = await videoTranscodingQueue.addJob({
-                                inputPath: originalPath,
-                                userId: user._id.toString(),
-                                jobType: 'post',
-                                originalFilename: file.originalname
-                            });
-                            console.log('[PostController] Video transcoding job queued:', transcodingJobId);
-                            
-                            // Upload original file immediately (will be replaced with transcoded version later)
-                            // This allows the post to be created immediately
-                            fileToUpload = originalPath;
-                        } catch (queueError) {
-                            console.error('[PostController] Failed to queue transcoding job:', queueError);
-                            // Continue with original file if queueing fails
-                            fileToUpload = originalPath;
+                    // Handle file upload based on storage type
+                    // diskUpload provides file.path, multer-s3 provides file.location and file.key
+                    let uploadResult;
+                    if (file.path) {
+                        // File was saved to disk (diskStorage) - upload to S3
+                        uploadResult = await StorageService.uploadFromPath(file.path);
+                        
+                        // For videos: queue transcoding job (async processing)
+                        if (isVideoFile) {
+                            try {
+                                console.log('[PostController] Queueing video transcoding job...');
+                                transcodingJobId = await videoTranscodingQueue.addJob({
+                                    inputPath: file.path,
+                                    userId: user._id.toString(),
+                                    jobType: 'post',
+                                    originalFilename: file.originalname
+                                });
+                                console.log('[PostController] Video transcoding job queued:', transcodingJobId);
+                            } catch (queueError) {
+                                console.error('[PostController] Failed to queue transcoding job:', queueError);
+                                // Continue without transcoding if queueing fails
+                            }
                         }
+                    } else if (file.location && file.key) {
+                        // File was already uploaded via multer-s3
+                        uploadResult = await StorageService.uploadFromRequest(file);
+                    } else {
+                        throw new Error('Invalid file object: missing path (diskStorage) or location/key (multer-s3)');
                     }
 
-                    // Upload to Cloudinary (original file for videos, will be updated when transcoding completes)
-                    const result = await cloudinary.uploader.upload(fileToUpload, {
-                        folder: userFolder,
-                        upload_preset: process.env.UPLOAD_PRESET,
-                        resource_type: 'auto', // auto = images + videos
-                        quality: '100'
-                    });
-
-                    // Determine media type
-                    const mediaType = result.resource_type === 'video' ? 'video' : 'image';
+                    // Determine media type from mimetype
+                    const mediaType = isVideoFile ? 'video' : 'image';
+                    const format = file.mimetype.split('/')[1] || 'unknown';
 
                     // Save upload record to database
                     const mediaRecord = await Media.create({
                         userId: user._id,
-                        url: result.secure_url,
-                        public_id: result.public_id,
-                        format: result.format,
-                        resource_type: result.resource_type,
-                        fileSize: result.bytes || file.size,
+                        url: uploadResult.url,
+                        public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
+                        format: format,
+                        resource_type: mediaType,
+                        fileSize: file.size,
                         originalFilename: file.originalname,
-                        folder: result.folder || userFolder,
-                        transcodingJobId: transcodingJobId || null, // Link to transcoding job if video
+                        folder: 'user_uploads',
+                        provider: uploadResult.provider,
+                        transcodingJobId: transcodingJobId || null,
                         isTranscoding: isVideoFile && transcodingJobId ? true : false
                     });
 
-                    // Store callback data for later (after post is created)
+                    // Store callback data for later (after post is created) if video transcoding
                     if (isVideoFile && transcodingJobId) {
-                        // Store callback info to set up after post creation
                         uploadedFiles.push({
                             _callbackData: {
                                 transcodingJobId,
                                 mediaRecordId: mediaRecord._id.toString(),
-                                publicId: result.public_id,
-                                userFolder
+                                publicId: uploadResult.key,
+                                postId: null // Will be set after post creation
                             }
                         });
                     }
 
                     uploadedFiles.push({
-                        url: result.secure_url,
-                        publicId: result.public_id,
+                        url: uploadResult.url,
+                        publicId: uploadResult.key, // Use key as publicId
                         type: mediaType,
-                        format: result.format
+                        format: format
                     });
 
                     media.push({
-                        url: result.secure_url,
-                        publicId: result.public_id,
+                        url: uploadResult.url,
+                        publicId: uploadResult.key, // Use key as publicId
                         type: mediaType,
-                        format: result.format || null,
+                        format: format || null,
                         transcodingJobId: transcodingJobId || null,
                         isTranscoding: isVideoFile && transcodingJobId ? true : false
                     });
@@ -436,7 +431,10 @@ const createPost = async (req, res) => {
         // Set up callbacks for video transcoding completion (after post is created)
         for (const fileData of uploadedFiles) {
             if (fileData._callbackData) {
-                const { transcodingJobId, mediaRecordId, publicId, userFolder } = fileData._callbackData;
+                const { transcodingJobId, mediaRecordId, publicId } = fileData._callbackData;
+                
+                // Update callback data with post ID
+                fileData._callbackData.postId = post._id.toString();
                 
                 // Listen for job completion
                 const onJobComplete = async ({ jobId, result: transcodedResult }) => {
@@ -444,22 +442,17 @@ const createPost = async (req, res) => {
                         try {
                             console.log(`[PostController] Transcoding completed for job ${jobId}, updating media ${mediaRecordId}`);
                             
-                            // Upload transcoded video to Cloudinary
-                            const transcodedResult_cloudinary = await cloudinary.uploader.upload(transcodedResult.outputPath, {
-                                folder: userFolder,
-                                upload_preset: process.env.UPLOAD_PRESET,
-                                resource_type: 'video',
-                                quality: 'auto',
-                                format: 'mp4',
-                                video_codec: 'h264',
-                                video_profile: 'baseline',
-                                video_level: '3.1'
-                            });
+                            // Upload transcoded video to S3
+                            const transcodedKey = `transcoded/${publicId}`;
+                            const transcodedUploadResult = await StorageService.uploadFromPath(
+                                transcodedResult.outputPath,
+                                transcodedKey
+                            );
 
                             // Update media record with transcoded version
                             await Media.findByIdAndUpdate(mediaRecordId, {
-                                url: transcodedResult_cloudinary.secure_url,
-                                public_id: transcodedResult_cloudinary.public_id,
+                                url: transcodedUploadResult.url,
+                                public_id: transcodedUploadResult.key,
                                 fileSize: transcodedResult.fileSize,
                                 isTranscoding: false,
                                 transcodingCompleted: true
@@ -468,10 +461,11 @@ const createPost = async (req, res) => {
                             // Update post media array with new URL
                             await Post.updateOne(
                                 { _id: post._id, 'media.publicId': publicId },
-                                { $set: { 'media.$.url': transcodedResult_cloudinary.secure_url, 'media.$.publicId': transcodedResult_cloudinary.public_id } }
+                                { $set: { 'media.$.url': transcodedUploadResult.url, 'media.$.publicId': transcodedUploadResult.key } }
                             );
 
                             // Cleanup transcoded file
+                            const { cleanupFile } = require('../../services/videoTranscoder');
                             await cleanupFile(transcodedResult.outputPath);
                             
                             console.log(`[PostController] Media ${mediaRecordId} updated with transcoded video`);
@@ -532,10 +526,10 @@ const createPost = async (req, res) => {
     } catch (error) {
         console.error('Create post error:', error);
 
-        // If post creation failed but files were uploaded, try to clean up Cloudinary
+        // If post creation failed but files were uploaded, try to clean up S3
         if (uploadedFiles.length > 0) {
             console.warn('Post creation failed, but files were uploaded. Consider cleanup.');
-            // Note: We don't delete from Cloudinary here as the post might be created later
+            // Note: We don't delete from S3 here as the post might be created later
             // This is a trade-off - you may want to implement cleanup logic if needed
         }
 
@@ -975,8 +969,6 @@ const getUserPosts = async (req, res) => {
 
 // Upload media for posts (separate endpoint - Option A flow)
 const uploadPostMedia = async (req, res) => {
-    let transcodedPath = null;
-    let originalPath = req.file?.path;
 
     try {
         if (!req.file) {
@@ -988,76 +980,54 @@ const uploadPostMedia = async (req, res) => {
 
         const user = req.user; // From protect middleware
 
-        // User-specific folder path for post media
-        const userFolder = `user_uploads/${user._id}/posts`;
-
         // Check if uploaded file is a video
         const isVideoFile = isVideo(req.file.mimetype);
-        let fileToUpload = originalPath;
 
-        // Transcode video if it's a video file
-        if (isVideoFile) {
-            try {
-                console.log('Transcoding video for post...');
-                const transcoded = await transcodeVideo(originalPath);
-                transcodedPath = transcoded.outputPath;
-                fileToUpload = transcodedPath;
-                console.log('Video transcoded successfully:', transcodedPath);
-            } catch (transcodeError) {
-                console.error('Video transcoding failed:', transcodeError);
-                // Continue with original file if transcoding fails
-                console.warn('Uploading original video without transcoding');
-            }
+        // Handle file upload based on storage type
+        // diskUpload provides file.path, multer-s3 provides file.location and file.key
+        let uploadResult;
+        if (req.file.path) {
+            // File was saved to disk (diskStorage) - upload to S3
+            uploadResult = await StorageService.uploadFromPath(req.file.path);
+        } else if (req.file.location && req.file.key) {
+            // File was already uploaded via multer-s3
+            uploadResult = await StorageService.uploadFromRequest(req.file);
+        } else {
+            throw new Error('Invalid file object: missing path (diskStorage) or location/key (multer-s3)');
         }
 
-        // Upload to Cloudinary
-        const result = await cloudinary.uploader.upload(fileToUpload, {
-            folder: userFolder,
-            upload_preset: process.env.UPLOAD_PRESET,
-            resource_type: 'auto', // auto = images + videos
-            quality: '100'
-        });
-
-        // Determine media type
-        const mediaType = result.resource_type === 'video' ? 'video' : 'image';
+        // Determine media type from mimetype
+        const mediaType = isVideoFile ? 'video' : 'image';
+        const format = req.file.mimetype.split('/')[1] || 'unknown';
 
         // Save upload record to database
         const mediaRecord = await Media.create({
             userId: user._id,
-            url: result.secure_url,
-            public_id: result.public_id,
-            format: result.format,
-            resource_type: result.resource_type,
-            fileSize: result.bytes || req.file.size,
+            url: uploadResult.url,
+            public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
+            format: format,
+            resource_type: mediaType,
+            fileSize: req.file.size,
             originalFilename: req.file.originalname,
-            folder: result.folder || userFolder
+            folder: 'user_uploads',
+            provider: uploadResult.provider
         });
-
-        // Cleanup transcoded file after successful upload
-        if (transcodedPath) {
-            await cleanupFile(transcodedPath);
-        }
 
         return res.status(200).json({
             success: true,
             message: 'Media uploaded successfully',
             data: {
-                url: result.secure_url,
-                publicId: result.public_id,
+                url: uploadResult.url,
+                publicId: uploadResult.key, // Use key as publicId
                 type: mediaType,
-                format: result.format,
-                fileSize: result.bytes || req.file.size,
+                format: format,
+                fileSize: req.file.size,
                 mediaId: mediaRecord._id
             }
         });
 
     } catch (error) {
         console.error('Post media upload error:', error);
-        
-        // Cleanup transcoded file on error
-        if (transcodedPath) {
-            await cleanupFile(transcodedPath);
-        }
 
         return res.status(500).json({
             success: false,
@@ -1249,14 +1219,15 @@ const deletePost = async (req, res) => {
             });
         }
 
-        // Delete media from Cloudinary if any
+        // Delete media from S3 if any
         if (post.media && post.media.length > 0) {
             for (const mediaItem of post.media) {
                 try {
-                    await cloudinary.uploader.destroy(mediaItem.publicId, { invalidate: true });
-                } catch (cloudinaryError) {
-                    console.warn(`Failed to delete media ${mediaItem.publicId} from Cloudinary:`, cloudinaryError.message);
-                    // Continue with deletion even if Cloudinary deletion fails
+                    // publicId contains the S3 key
+                    await StorageService.delete(mediaItem.publicId);
+                } catch (deleteError) {
+                    console.warn(`Failed to delete media ${mediaItem.publicId} from S3:`, deleteError.message);
+                    // Continue with deletion even if S3 deletion fails
                 }
             }
         }
@@ -1767,13 +1738,14 @@ const reportPost = async (req, res) => {
         let postDeleted = false;
 
         if (reportsWithSameReason >= 2) {
-            // Delete media from Cloudinary if any
+            // Delete media from S3 if any
             if (post.media && post.media.length > 0) {
                 for (const mediaItem of post.media) {
                     try {
-                        await cloudinary.uploader.destroy(mediaItem.publicId, { invalidate: true });
-                    } catch (cloudinaryError) {
-                        console.warn(`Failed to delete media ${mediaItem.publicId} from Cloudinary:`, cloudinaryError.message);
+                        // publicId contains the S3 key
+                        await StorageService.delete(mediaItem.publicId);
+                    } catch (deleteError) {
+                        console.warn(`Failed to delete media ${mediaItem.publicId} from S3:`, deleteError.message);
                     }
                 }
             }
