@@ -152,6 +152,87 @@ const isPostVisible = async (postUserId, viewingUserId) => {
     return visibilityMap.get(postUserId.toString()) || false;
 };
 
+// Helper function to enrich media with transcoding status
+const enrichMediaWithTranscodingStatus = async (mediaArray) => {
+    if (!mediaArray || mediaArray.length === 0) {
+        return mediaArray;
+    }
+
+    // Find all video media items
+    const videoMedia = mediaArray.filter(m => m.type === 'video');
+    if (videoMedia.length === 0) {
+        return mediaArray; // No videos, return as-is
+    }
+
+    // Get all publicIds for video media (handle both camelCase and snake_case)
+    const publicIds = videoMedia.map(m => m.publicId || m.public_id).filter(Boolean);
+
+    if (publicIds.length === 0) {
+        return mediaArray; // No valid publicIds
+    }
+
+    // Fetch Media records in batch
+    const mediaRecords = await Media.find({
+        public_id: { $in: publicIds }
+    }).select('public_id url isTranscoding transcodingCompleted transcodingJobId').lean();
+
+    // Create a map of publicId -> Media record (normalize to handle both formats)
+    const mediaMap = new Map();
+    mediaRecords.forEach(record => {
+        // Map by both formats for compatibility
+        mediaMap.set(record.public_id, record);
+    });
+
+    // Enrich media array with transcoding status
+    return mediaArray.map(mediaItem => {
+        if (mediaItem.type !== 'video') {
+            return mediaItem; // Images don't need transcoding status
+        }
+
+        // Get publicId (handle both camelCase and snake_case)
+        const publicId = mediaItem.publicId || mediaItem.public_id;
+        const mediaRecord = mediaMap.get(publicId);
+        if (!mediaRecord) {
+            // Media record not found, return original with unknown status
+            return {
+                ...mediaItem,
+                isTranscoding: false,
+                transcodingCompleted: false,
+                transcodingStatus: 'unknown'
+            };
+        }
+
+        // If transcoding is complete, use the transcoded URL from Media record
+        // Otherwise, use the original URL but include status
+        const enrichedMedia = {
+            ...mediaItem,
+            isTranscoding: mediaRecord.isTranscoding || false,
+            transcodingCompleted: mediaRecord.transcodingCompleted || false,
+            transcodingJobId: mediaRecord.transcodingJobId || null,
+            transcodingStatus: mediaRecord.isTranscoding 
+                ? 'processing' 
+                : mediaRecord.transcodingCompleted 
+                    ? 'completed' 
+                    : 'pending'
+        };
+
+        // If transcoding is complete, use the transcoded URL (from Media record)
+        // The Media record's URL should be the transcoded version after completion
+        if (mediaRecord.transcodingCompleted && mediaRecord.url) {
+            enrichedMedia.url = mediaRecord.url;
+            enrichedMedia.isPlayable = true;
+        } else if (mediaRecord.isTranscoding) {
+            // Still transcoding - return original URL but mark as not playable yet
+            enrichedMedia.isPlayable = false;
+        } else {
+            // Transcoding not started or failed - return original URL
+            enrichedMedia.isPlayable = true; // Original might work on some devices
+        }
+
+        return enrichedMedia;
+    });
+};
+
 // Helper function to fetch and format comments from Comment collection
 const getFormattedComments = async (contentId, limit = 15) => {
     try {
@@ -591,13 +672,16 @@ const getAllPosts = async (req, res) => {
 
                 const commentCount = await post.getCommentCount();
                 const comments = await getFormattedComments(post._id, 15);
+                
+                // Enrich media with transcoding status for videos
+                const enrichedMedia = await enrichMediaWithTranscodingStatus(post.media || []);
 
                 return {
                     id: post._id.toString(),
                     userId: userIdString,
                     user: userInfo,
                     caption: post.caption,
-                    media: post.media,
+                    media: enrichedMedia,
                     likes: post.likes || [[], [], [], [], [], []],
                     comments: comments,
                     likeCount: post.likeCount,
@@ -666,13 +750,16 @@ const getMyPosts = async (req, res) => {
 
                 const commentCount = await post.getCommentCount();
                 const comments = await getFormattedComments(post._id, 15);
+                
+                // Enrich media with transcoding status for videos
+                const enrichedMedia = await enrichMediaWithTranscodingStatus(post.media || []);
 
                 return {
                     id: post._id.toString(),
                     userId: userIdString,
                     user: userInfo,
                     caption: post.caption,
-                    media: post.media,
+                    media: enrichedMedia,
                     likes: post.likes || [[], [], [], [], [], []],
                     comments: comments,
                     likeCount: post.likeCount,
@@ -829,13 +916,16 @@ const getUserPosts = async (req, res) => {
 
                 const commentCount = await post.getCommentCount();
                 const comments = await getFormattedComments(post._id, 15);
+                
+                // Enrich media with transcoding status for videos
+                const enrichedMedia = await enrichMediaWithTranscodingStatus(post.media || []);
 
                 return {
                     id: post._id.toString(),
                     userId: userIdString,
                     user: userInfo,
                     caption: post.caption,
-                    media: post.media,
+                    media: enrichedMedia,
                     likes: post.likes || [[], [], [], [], [], []],
                     comments: comments,
                     likeCount: post.likeCount,
@@ -1061,6 +1151,9 @@ const toggleLikePost = async (req, res) => {
             profileImage: post.userId.profile?.profileImage
         } : null;
 
+        // Enrich media with transcoding status for videos
+        const enrichedMedia = await enrichMediaWithTranscodingStatus(post.media || []);
+
         return res.status(200).json({
             success: true,
             message: `Post ${action} successfully`,
@@ -1070,7 +1163,7 @@ const toggleLikePost = async (req, res) => {
                     userId: userIdString,
                     user: userInfo,
                     caption: post.caption,
-                    media: post.media,
+                    media: enrichedMedia,
                     likes: post.likes || [[], [], [], [], [], []],
                     comments: limitComments(post.comments),
                     likeCount: post.likeCount,
