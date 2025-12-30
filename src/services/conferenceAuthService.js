@@ -14,13 +14,19 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Shared device-limit helper
 const manageDeviceLimit = (entity) => {
-    if (!entity.tokens) entity.tokens = {};
-    if (!Array.isArray(entity.tokens.refreshTokens)) entity.tokens.refreshTokens = [];
+    if (!entity.sessions) entity.sessions = {};
+    if (!Array.isArray(entity.sessions.refreshTokens)) entity.sessions.refreshTokens = [];
 
-    if (entity.tokens.refreshTokens.length >= MAX_DEVICES) {
-        entity.tokens.refreshTokens.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        entity.tokens.refreshTokens.shift();
+    if (entity.sessions.refreshTokens.length >= MAX_DEVICES) {
+        entity.sessions.refreshTokens.sort((a, b) => new Date(a.issuedAt) - new Date(b.issuedAt));
+        entity.sessions.refreshTokens.shift();
     }
+};
+
+// Generate device ID from user agent
+const generateDeviceId = (userAgent) => {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(userAgent || 'Unknown Device').digest('hex').substring(0, 16);
 };
 
 /**
@@ -76,7 +82,9 @@ const signupEntity = async ({
         };
     }
 
-    const existing = await Model.findOne({ email: normalizedEmail });
+    // Check for existing account with case-insensitive email match
+    const emailRegex = new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const existing = await Model.findOne({ 'account.email': emailRegex });
     if (existing) {
         return {
             status: 400,
@@ -96,7 +104,7 @@ const signupEntity = async ({
         }
 
         // Check if phone already exists for any conference account
-        const existingPhone = await Model.findOne({ phone: normalizedPhone });
+        const existingPhone = await Model.findOne({ 'account.phone': normalizedPhone });
         if (existingPhone) {
             return {
                 status: 400,
@@ -177,28 +185,67 @@ const signupEntity = async ({
         };
     }
 
+    const role = entityType === 'host' ? 'HOST' : 'SPEAKER';
+    const deviceId = generateDeviceId(userAgent);
+    const now = new Date();
+
     const entity = await Model.create({
-        email: normalizedEmail,
-        password,
-        name: name.trim(),
-        bio: bio || '',
-        phone: normalizedPhone || null,
-        emailVerified: true,
-        phoneVerified: !!normalizedPhone,
-        tokens: {
+        role: role, // Required for discriminator
+        account: {
+            email: normalizedEmail,
+            phone: normalizedPhone || null,
+            role: role,
+            status: {
+                isActive: true,
+                isSuspended: false
+            }
+        },
+        profile: {
+            name: name.trim(),
+            bio: bio || '',
+            images: {
+                avatar: '',
+                cover: ''
+            }
+        },
+        verification: {
+            email: {
+                verified: true,
+                verifiedAt: now
+            },
+            phone: {
+                verified: !!normalizedPhone,
+                verifiedAt: normalizedPhone ? now : null
+            },
+            isVerified: false
+        },
+        security: {
+            passwordHash: password, // Will be hashed in pre-save hook
+            passwordChangedAt: now,
+            lastLogin: now,
+            devices: [{
+                deviceId: deviceId,
+                ip: null, // Can be extracted from req if needed
+                lastActive: now
+            }]
+        },
+        sessions: {
             refreshTokens: []
+        },
+        system: {
+            version: 2
         }
     });
 
     const { token: refreshToken, expiryDate } = generateRefreshToken();
     manageDeviceLimit(entity);
-    entity.tokens.refreshTokens.push({
-        token: refreshToken,
+    entity.sessions.refreshTokens.push({
+        tokenId: refreshToken,
+        issuedAt: now,
         expiresAt: expiryDate,
-        device: userAgent || 'Unknown Device',
-        createdAt: new Date()
+        deviceId: deviceId
     });
-    entity.lastLogin = new Date();
+    entity.security.lastLogin = now;
     await entity.save();
 
     const accessTokenPayload =
@@ -210,12 +257,12 @@ const signupEntity = async ({
 
     const safeEntity = {
         _id: entity._id,
-        email: entity.email,
-        name: entity.name,
-        bio: entity.bio,
-        phone: entity.phone,
-        profileImage: entity.profileImage,
-        isVerified: entity.isVerified,
+        email: entity.account.email,
+        name: entity.profile.name,
+        bio: entity.profile.bio,
+        phone: entity.account.phone,
+        profileImage: entity.profile.images.avatar,
+        isVerified: entity.verification.isVerified,
         createdAt: entity.createdAt
     };
 
@@ -257,9 +304,16 @@ const loginEntity = async ({
     }
 
     const normalizedEmail = normalizeEmail(email);
-    const entity = await Model.findOne({ email: normalizedEmail });
+    
+    // Query for the entity - use case-insensitive regex to handle any existing data
+    // that might not be lowercase (from before schema update)
+    // The regex is anchored (^ and $) so MongoDB can still use the index efficiently
+    const emailRegex = new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const entity = await Model.findOne({ 'account.email': emailRegex });
 
     if (!entity) {
+        // Log for debugging (remove in production or use proper logger)
+        console.log(`[Login] Entity not found for email: ${normalizedEmail}, entityType: ${entityType}`);
         return {
             status: 401,
             body: {
@@ -269,7 +323,30 @@ const loginEntity = async ({
         };
     }
 
-    if (!entity.isActive) {
+    // Verify nested structure exists (safety check for malformed data)
+    if (!entity.account) {
+        console.log(`[Login] Entity found but missing 'account' object for email: ${normalizedEmail}, entityType: ${entityType}`);
+        return {
+            status: 500,
+            body: {
+                success: false,
+                message: 'Account data structure is invalid. Please contact support.'
+            }
+        };
+    }
+
+    if (!entity.account.status || typeof entity.account.status.isActive !== 'boolean') {
+        console.log(`[Login] Entity found but missing 'account.status' for email: ${normalizedEmail}, entityType: ${entityType}`);
+        return {
+            status: 500,
+            body: {
+                success: false,
+                message: 'Account status data is invalid. Please contact support.'
+            }
+        };
+    }
+
+    if (!entity.account.status.isActive) {
         return {
             status: 403,
             body: {
@@ -279,8 +356,9 @@ const loginEntity = async ({
         };
     }
 
-    const isPasswordValid = await entity.comparePassword(password);
-    if (!isPasswordValid) {
+    // Check if password hash exists and is valid
+    if (!entity.security || !entity.security.passwordHash) {
+        console.log(`[Login] Entity found but no password hash for email: ${normalizedEmail}, entityType: ${entityType}`);
         return {
             status: 401,
             body: {
@@ -290,15 +368,43 @@ const loginEntity = async ({
         };
     }
 
+    const isPasswordValid = await entity.comparePassword(password);
+    if (!isPasswordValid) {
+        console.log(`[Login] Password validation failed for email: ${normalizedEmail}, entityType: ${entityType}`);
+        return {
+            status: 401,
+            body: {
+                success: false,
+                message: 'Invalid email or password'
+            }
+        };
+    }
+
+    const deviceId = generateDeviceId(userAgent);
+    const now = new Date();
     const { token: refreshToken, expiryDate } = generateRefreshToken();
+    
     manageDeviceLimit(entity);
-    entity.tokens.refreshTokens.push({
-        token: refreshToken,
+    entity.sessions.refreshTokens.push({
+        tokenId: refreshToken,
+        issuedAt: now,
         expiresAt: expiryDate,
-        device: userAgent || 'Unknown Device',
-        createdAt: new Date()
+        deviceId: deviceId
     });
-    entity.lastLogin = new Date();
+    
+    // Update or add device tracking
+    const existingDevice = entity.security.devices.find(d => d.deviceId === deviceId);
+    if (existingDevice) {
+        existingDevice.lastActive = now;
+    } else {
+        entity.security.devices.push({
+            deviceId: deviceId,
+            ip: null, // Can be extracted from req if needed
+            lastActive: now
+        });
+    }
+    
+    entity.security.lastLogin = now;
     await entity.save();
 
     const accessTokenPayload =
@@ -310,13 +416,13 @@ const loginEntity = async ({
 
     const safeEntity = {
         _id: entity._id,
-        email: entity.email,
-        name: entity.name,
-        bio: entity.bio,
-        phone: entity.phone,
-        profileImage: entity.profileImage,
-        isVerified: entity.isVerified,
-        lastLogin: entity.lastLogin
+        email: entity.account.email,
+        name: entity.profile.name,
+        bio: entity.profile.bio,
+        phone: entity.account.phone,
+        profileImage: entity.profile.images.avatar,
+        isVerified: entity.verification.isVerified,
+        lastLogin: entity.security.lastLogin
     };
 
     return {
@@ -342,7 +448,7 @@ const getProfileEntity = async ({ entityType, req }) => {
         entityType === 'host' ? 'Host' : 'Speaker'
     );
 
-    const entity = await Model.findById(current._id).select('-password -tokens');
+    const entity = await Model.findById(current._id).select('-security.passwordHash -sessions');
 
     return {
         status: 200,
@@ -365,21 +471,32 @@ const updateProfileEntity = async ({ entityType, req }) => {
     const { name, bio, phone, profileImage } = req.body;
     const entity = await Model.findById(req[key]._id);
 
-    if (name !== undefined) entity.name = name.trim();
-    if (bio !== undefined) entity.bio = bio || '';
-    if (phone !== undefined) entity.phone = phone || null;
-    if (profileImage !== undefined) entity.profileImage = profileImage || '';
+    if (name !== undefined) entity.profile.name = name.trim();
+    if (bio !== undefined) entity.profile.bio = bio || '';
+    if (phone !== undefined) {
+        // Normalize phone if provided
+        if (phone) {
+            let normalizedPhone = phone.trim().replace(/[\s\-\(\)]/g, '');
+            if (!normalizedPhone.startsWith('+')) {
+                normalizedPhone = '+' + normalizedPhone;
+            }
+            entity.account.phone = normalizedPhone;
+        } else {
+            entity.account.phone = null;
+        }
+    }
+    if (profileImage !== undefined) entity.profile.images.avatar = profileImage || '';
 
     await entity.save();
 
     const safeEntity = {
         _id: entity._id,
-        email: entity.email,
-        name: entity.name,
-        bio: entity.bio,
-        phone: entity.phone,
-        profileImage: entity.profileImage,
-        isVerified: entity.isVerified
+        email: entity.account.email,
+        name: entity.profile.name,
+        bio: entity.profile.bio,
+        phone: entity.account.phone,
+        profileImage: entity.profile.images.avatar,
+        isVerified: entity.verification.isVerified
     };
 
     return {
@@ -404,17 +521,19 @@ const refreshTokenEntity = async ({
     const entity = req[key];
     const { refreshToken: oldRefreshToken } = req.body;
 
-    entity.tokens.refreshTokens = entity.tokens.refreshTokens.filter(
-        (rt) => rt.token !== oldRefreshToken
+    entity.sessions.refreshTokens = entity.sessions.refreshTokens.filter(
+        (rt) => rt.tokenId !== oldRefreshToken
     );
 
+    const deviceId = generateDeviceId(req.headers['user-agent']);
+    const now = new Date();
     const { token: newRefreshToken, expiryDate } = generateRefreshToken();
     manageDeviceLimit(entity);
-    entity.tokens.refreshTokens.push({
-        token: newRefreshToken,
+    entity.sessions.refreshTokens.push({
+        tokenId: newRefreshToken,
+        issuedAt: now,
         expiresAt: expiryDate,
-        device: req.headers['user-agent'] || 'Unknown Device',
-        createdAt: new Date()
+        deviceId: deviceId
     });
     await entity.save();
 
@@ -446,8 +565,8 @@ const logoutEntity = async ({ entityType, req }) => {
     const { refreshToken } = req.body;
 
     if (refreshToken) {
-        entity.tokens.refreshTokens = entity.tokens.refreshTokens.filter(
-            (rt) => rt.token !== refreshToken
+        entity.sessions.refreshTokens = entity.sessions.refreshTokens.filter(
+            (rt) => rt.tokenId !== refreshToken
         );
         await entity.save();
     }

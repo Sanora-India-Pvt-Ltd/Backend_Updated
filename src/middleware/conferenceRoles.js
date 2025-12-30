@@ -14,14 +14,14 @@ const ROLES = {
 /**
  * Get user's role for a specific conference
  * Supports: Host, Speaker, User (with SUPER_ADMIN check)
- * @param {Object} req - Request object (may have req.host, req.speaker, or req.user)
+ * @param {Object} req - Request object (may have req.hostUser, req.speaker, or req.user)
  * @param {Object} conference - Conference object
  * @returns {Promise<string>} - User's role
  */
 const getUserConferenceRole = async (req, conference) => {
     // Check if authenticated as Host
-    if (req.host) {
-        if (conference.hostId && conference.hostId.toString() === req.host._id.toString()) {
+    if (req.hostUser) {
+        if (conference.hostId && conference.hostId.toString() === req.hostUser._id.toString()) {
             return ROLES.HOST;
         }
     }
@@ -56,7 +56,7 @@ const getUserConferenceRole = async (req, conference) => {
 
         // Check if user is SPEAKER - legacy support
         if (conference.speakers && conference.speakers.length > 0) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (speaker && conference.speakers.some(s => s.toString() === speaker._id.toString())) {
                 return ROLES.SPEAKER;
             }
@@ -80,8 +80,8 @@ const requireConferenceRole = (...allowedRoles) => {
         try {
             const { conferenceId } = req.params;
 
-            // Check if any authentication is present
-            if (!req.host && !req.speaker && !req.user) {
+        // Check if any authentication is present
+        if (!req.hostUser && !req.speaker && !req.user) {
                 return res.status(401).json({
                     success: false,
                     message: 'Authentication required'
@@ -132,7 +132,7 @@ const requireConferenceRole = (...allowedRoles) => {
 const requireHostOrSuperAdmin = (req, res, next) => {
     try {
         // Check if authenticated as Host
-        if (req.host) {
+        if (req.hostUser) {
             return next();
         }
 
@@ -168,7 +168,7 @@ const attachConferenceRole = async (req, res, next) => {
     try {
         const { conferenceId } = req.params;
 
-        if ((req.host || req.speaker || req.user) && conferenceId) {
+        if ((req.hostUser || req.speaker || req.user) && conferenceId) {
             const conference = await Conference.findById(conferenceId);
             if (conference) {
                 const userRole = await getUserConferenceRole(req, conference);

@@ -2,81 +2,141 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 // Base schema for both Host and Speaker (single collection via discriminators)
+// Production-grade nested structure
 const conferenceAccountSchema = new mongoose.Schema({
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-        lowercase: true,
-        trim: true
-    },
-    password: {
-        type: String,
-        required: true,
-        minlength: 6
-    },
-    name: {
-        type: String,
-        required: true,
-        trim: true
-    },
-    bio: {
-        type: String,
-        default: '',
-        trim: true
-    },
-    phone: {
-        type: String,
-        default: null,
-        trim: true
-    },
-    profileImage: {
-        type: String,
-        default: ''
-    },
-    isVerified: {
-        // Business-level verification (e.g. KYC) – keep existing meaning
-        type: Boolean,
-        default: false
-    },
-    isActive: {
-        type: Boolean,
-        default: true
-    },
-    // New: granular contact verification flags
-    emailVerified: {
-        type: Boolean,
-        default: false
-    },
-    phoneVerified: {
-        type: Boolean,
-        default: false
-    },
-    tokens: {
-        refreshTokens: [{
-            token: {
-                type: String,
-                required: true
+    account: {
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true,
+            trim: true
+        },
+        phone: {
+            type: String,
+            default: null,
+            trim: true
+        },
+        role: {
+            type: String,
+            enum: ['HOST', 'SPEAKER'],
+            required: true
+        },
+        status: {
+            isActive: {
+                type: Boolean,
+                default: true
             },
-            expiresAt: {
+            isSuspended: {
+                type: Boolean,
+                default: false
+            }
+        }
+    },
+    profile: {
+        name: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        bio: {
+            type: String,
+            default: '',
+            trim: true
+        },
+        images: {
+            avatar: {
+                type: String,
+                default: ''
+            },
+            cover: {
+                type: String,
+                default: ''
+            }
+        }
+    },
+    verification: {
+        email: {
+            verified: {
+                type: Boolean,
+                default: false
+            },
+            verifiedAt: {
                 type: Date,
+                default: null
+            }
+        },
+        phone: {
+            verified: {
+                type: Boolean,
+                default: false
+            },
+            verifiedAt: {
+                type: Date,
+                default: null
+            }
+        },
+        // Business-level verification (e.g. KYC) – keep existing meaning
+        isVerified: {
+            type: Boolean,
+            default: false
+        }
+    },
+    security: {
+        passwordHash: {
+            type: String,
+            required: true
+        },
+        passwordChangedAt: {
+            type: Date,
+            default: Date.now
+        },
+        lastLogin: {
+            type: Date,
+            default: null
+        },
+        devices: [{
+            deviceId: {
+                type: String,
                 required: true
             },
-            device: {
+            ip: {
                 type: String,
-                default: 'Unknown Device'
+                default: null
             },
-            createdAt: {
+            lastActive: {
                 type: Date,
                 default: Date.now
             }
         }]
     },
-    lastLogin: {
-        type: Date,
-        default: null
+    sessions: {
+        refreshTokens: [{
+            tokenId: {
+                type: String,
+                required: true
+            },
+            issuedAt: {
+                type: Date,
+                default: Date.now
+            },
+            expiresAt: {
+                type: Date,
+                required: true
+            },
+            deviceId: {
+                type: String,
+                default: 'Unknown Device'
+            }
+        }]
     },
-    // Discriminator key: HOST | SPEAKER
+    system: {
+        version: {
+            type: Number,
+            default: 2
+        }
+    },
+    // Discriminator key: HOST | SPEAKER (kept at root for Mongoose discriminator compatibility)
     role: {
         type: String,
         enum: ['HOST', 'SPEAKER'],
@@ -88,25 +148,39 @@ const conferenceAccountSchema = new mongoose.Schema({
     collection: 'conferenceaccounts'
 });
 
-// Hash password before saving
-conferenceAccountSchema.pre('save', async function(next) {
-    if (!this.isModified('password')) {
-        return next();
+// Sync role between root and account.role for consistency
+conferenceAccountSchema.pre('save', function() {
+    // Sync account.role to root role (for discriminator)
+    if (this.isModified('account.role') && this.account?.role) {
+        this.role = this.account.role;
     }
-    this.password = await bcrypt.hash(this.password, 10);
-    next();
+    // Sync root role to account.role (if role is set directly)
+    if (this.isModified('role') && this.role && (!this.account?.role || this.account.role !== this.role)) {
+        if (!this.account) this.account = {};
+        this.account.role = this.role;
+    }
+});
+
+// Hash password before saving
+conferenceAccountSchema.pre('save', async function() {
+    // Handle password hash - only hash if it's a plain text password (doesn't start with $2)
+    if (this.isModified('security.passwordHash') && this.security.passwordHash && !this.security.passwordHash.startsWith('$2')) {
+        this.security.passwordHash = await bcrypt.hash(this.security.passwordHash, 10);
+        this.security.passwordChangedAt = new Date();
+    }
 });
 
 // Method to compare password
 conferenceAccountSchema.methods.comparePassword = async function(candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
+    return await bcrypt.compare(candidatePassword, this.security.passwordHash);
 };
 
 // Indexes for better query performance
-// Note: email index is automatically created by unique: true in schema
-conferenceAccountSchema.index({ isVerified: 1, createdAt: -1 });
-conferenceAccountSchema.index({ isActive: 1 });
-conferenceAccountSchema.index({ role: 1 });
+conferenceAccountSchema.index({ 'account.email': 1 }, { unique: true });
+conferenceAccountSchema.index({ 'verification.isVerified': 1, createdAt: -1 });
+conferenceAccountSchema.index({ 'account.status.isActive': 1 });
+conferenceAccountSchema.index({ 'account.role': 1 });
+conferenceAccountSchema.index({ role: 1 }); // For discriminator
 
 const ConferenceAccount = mongoose.model('ConferenceAccount', conferenceAccountSchema);
 

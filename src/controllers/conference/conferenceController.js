@@ -10,7 +10,7 @@ const User = require('../../models/authorization/User');
 const { getUserConferenceRole, ROLES } = require('../../middleware/conferenceRoles');
 const mongoose = require('mongoose');
 
-const HOST_OWNER_SELECT = 'name email bio phone profile.name.full profile.profileImage profileImage isVerified isActive';
+const HOST_OWNER_SELECT = 'account.email account.phone account.role account.status profile.name profile.bio profile.images.avatar profile.images.cover verification.isVerified';
 
 /**
  * Generate unique public code for conference
@@ -33,8 +33,8 @@ const createConference = async (req, res) => {
         let hostId = null;
         let ownerModel = 'User';
 
-        if (req.host) {
-            hostId = req.host._id;
+        if (req.hostUser) {
+            hostId = req.hostUser._id;
             ownerModel = 'Host';
         } else if (req.speaker) {
             hostId = req.speaker._id;
@@ -106,7 +106,7 @@ const createConference = async (req, res) => {
         });
 
         await conference.populate('hostId', HOST_OWNER_SELECT);
-        await conference.populate('speakers', 'name email bio');
+        await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
 
         res.status(201).json({
             success: true,
@@ -147,7 +147,7 @@ const getConferences = async (req, res) => {
                 query.hostId = userId;
             } else if (role === 'speaker') {
                 // SPEAKER sees conferences they're assigned to
-                const speaker = await Speaker.findOne({ email: user.profile?.email });
+                const speaker = await Speaker.findOne({ 'account.email': user.profile?.email });
                 if (speaker) {
                     query.speakers = speaker._id;
                 } else {
@@ -158,7 +158,7 @@ const getConferences = async (req, res) => {
 
         const conferences = await Conference.find(query)
             .populate('hostId', HOST_OWNER_SELECT)
-            .populate('speakers', 'name email bio')
+            .populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar')
             .sort({ createdAt: -1 });
 
         res.json({
@@ -185,7 +185,7 @@ const getConferenceById = async (req, res) => {
 
         const conference = await Conference.findById(conferenceId)
             .populate('hostId', HOST_OWNER_SELECT)
-            .populate('speakers', 'name email bio');
+            .populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
 
         if (!conference) {
             return res.status(404).json({
@@ -281,7 +281,7 @@ const updateConference = async (req, res) => {
 
         await conference.save();
         await conference.populate('hostId', HOST_OWNER_SELECT);
-        await conference.populate('speakers', 'name email bio');
+        await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
 
         res.json({
             success: true,
@@ -331,7 +331,7 @@ const activateConference = async (req, res) => {
         await conference.save();
 
         await conference.populate('hostId', HOST_OWNER_SELECT);
-        await conference.populate('speakers', 'name email bio');
+        await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
 
         res.json({
             success: true,
@@ -408,7 +408,7 @@ const endConference = async (req, res) => {
         await conference.save();
 
         await conference.populate('hostId', HOST_OWNER_SELECT);
-        await conference.populate('speakers', 'name email bio');
+        await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
         await conference.populate('groupId');
 
         res.json({
@@ -485,7 +485,7 @@ const addQuestion = async (req, res) => {
         } else {
             // SPEAKER
             createdByRole = 'SPEAKER';
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (!speaker) {
                 return res.status(404).json({
                     success: false,
@@ -562,7 +562,7 @@ const updateQuestion = async (req, res) => {
 
         // Check ownership (SPEAKER can only update their own)
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (!speaker || question.createdById.toString() !== speaker._id.toString()) {
                 return res.status(403).json({
                     success: false,
@@ -652,7 +652,7 @@ const deleteQuestion = async (req, res) => {
 
         // Check ownership (SPEAKER can only delete their own)
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (!speaker || question.createdById.toString() !== speaker._id.toString()) {
                 return res.status(403).json({
                     success: false,
@@ -712,7 +712,7 @@ const pushQuestionLive = async (req, res) => {
 
         // Check ownership (SPEAKER can only push their own)
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (!speaker || question.createdById.toString() !== speaker._id.toString()) {
                 return res.status(403).json({
                     success: false,
@@ -952,7 +952,7 @@ const getQuestions = async (req, res) => {
         // Filter by ownership for SPEAKER
         let filteredQuestions = questions;
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (speaker) {
                 filteredQuestions = questions.filter(
                     q => q.createdById.toString() === speaker._id.toString()
@@ -1028,7 +1028,7 @@ const addMedia = async (req, res) => {
         } else {
             // SPEAKER
             createdByRole = 'SPEAKER';
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (!speaker) {
                 return res.status(404).json({
                     success: false,
@@ -1095,7 +1095,7 @@ const deleteMedia = async (req, res) => {
 
         // Check ownership (SPEAKER can only delete their own)
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (!speaker || conferenceMedia.createdById.toString() !== speaker._id.toString()) {
                 return res.status(403).json({
                     success: false,
@@ -1132,7 +1132,7 @@ const getMedia = async (req, res) => {
 
         // Filter by ownership for SPEAKER
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (speaker) {
                 query.createdById = speaker._id;
             } else {
@@ -1178,7 +1178,7 @@ const getAnalytics = async (req, res) => {
 
         // Filter by ownership for SPEAKER
         if (userRole === ROLES.SPEAKER) {
-            const speaker = await Speaker.findOne({ email: req.user.profile?.email });
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
             if (speaker) {
                 const speakerQuestions = await ConferenceQuestion.find({
                     conferenceId,

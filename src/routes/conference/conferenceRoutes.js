@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const { protect } = require('../../middleware/auth');
-const { protect: protectHost } = require('../../middleware/hostAuth');
-const { protect: protectSpeaker } = require('../../middleware/speakerAuth');
+const Host = require('../../models/conference/Host');
+const Speaker = require('../../models/conference/Speaker');
+const User = require('../../models/authorization/User');
 const { requireHostOrSuperAdmin, requireConferenceRole, attachConferenceRole, ROLES } = require('../../middleware/conferenceRoles');
 
 // Middleware to support multiple auth types (Host, Speaker, User)
@@ -25,12 +25,48 @@ const multiAuth = async (req, res, next) => {
             
             // Route based on token type
             if (decoded.type === 'host') {
-                return protectHost(req, res, next);
+                const host = await Host.findById(decoded.id).select('-security.passwordHash -sessions');
+                if (!host) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Host not found'
+                    });
+                }
+                if (!host.account?.status?.isActive) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Host account is inactive'
+                    });
+                }
+                req.hostUser = host;
+                return next();
             } else if (decoded.type === 'speaker') {
-                return protectSpeaker(req, res, next);
+                const speaker = await Speaker.findById(decoded.id).select('-security.passwordHash -sessions');
+                if (!speaker) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Speaker not found'
+                    });
+                }
+                if (!speaker.account?.status?.isActive) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Speaker account is inactive'
+                    });
+                }
+                req.speaker = speaker;
+                return next();
             } else {
-                // Default to User auth
-                return protect(req, res, next);
+                // Default to User auth (also handles tokens without type field)
+                const user = await User.findById(decoded.id).select('-auth');
+                if (!user) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'User not found'
+                    });
+                }
+                req.user = user;
+                return next();
             }
         } catch (jwtError) {
             return res.status(401).json({

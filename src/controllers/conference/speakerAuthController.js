@@ -11,7 +11,7 @@ const {
 const StorageService = require('../../services/storage.service');
 
 // Speaker Signup
-const signup = async (req, res) => {
+const signup = async (req, res, next) => {
     try {
         const result = await signupEntity({
             entityType: 'speaker',
@@ -144,12 +144,12 @@ const uploadProfileImage = async (req, res) => {
         }
 
         // Delete old profile image from S3 if it exists
-        if (speaker.profileImage) {
+        if (speaker.profile?.images?.avatar) {
             try {
                 // Extract key from URL
                 // Format: https://bucket.s3.region.amazonaws.com/key or https://bucket.s3-region.amazonaws.com/key
                 let key = null;
-                const url = speaker.profileImage;
+                const url = speaker.profile.images.avatar;
                 
                 // Try to extract key from S3 URL
                 if (url.includes('.s3.') || url.includes('.s3-')) {
@@ -185,12 +185,12 @@ const uploadProfileImage = async (req, res) => {
             throw new Error('Invalid file object: missing path (diskStorage) or location/key (multer-s3)');
         }
 
-        // Update speaker's profileImage field
+        // Update speaker's profile image field
         const updatedSpeaker = await Speaker.findByIdAndUpdate(
             speaker._id,
-            { profileImage: uploadResult.url },
+            { 'profile.images.avatar': uploadResult.url },
             { new: true, runValidators: true }
-        ).select('-password -tokens');
+        ).select('-security.passwordHash -sessions');
 
         return res.status(200).json({
             success: true,
@@ -199,9 +199,9 @@ const uploadProfileImage = async (req, res) => {
                 url: uploadResult.url,
                 speaker: {
                     _id: updatedSpeaker._id,
-                    email: updatedSpeaker.email,
-                    name: updatedSpeaker.name,
-                    profileImage: updatedSpeaker.profileImage
+                    email: updatedSpeaker.account.email,
+                    name: updatedSpeaker.profile.name,
+                    profileImage: updatedSpeaker.profile.images.avatar
                 }
             }
         });

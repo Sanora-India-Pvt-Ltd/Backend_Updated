@@ -37,7 +37,7 @@ const protect = async (req, res, next) => {
 
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-            const speaker = await Speaker.findById(decoded.id).select('-password -tokens');
+            const speaker = await Speaker.findById(decoded.id).select('-security.passwordHash -sessions');
             
             if (!speaker) {
                 return res.status(404).json({
@@ -46,7 +46,7 @@ const protect = async (req, res, next) => {
                 });
             }
 
-            if (!speaker.isActive) {
+            if (!speaker.account?.status?.isActive) {
                 return res.status(403).json({
                     success: false,
                     message: 'Speaker account is inactive'
@@ -78,7 +78,7 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        const speaker = await Speaker.findOne({ 'tokens.refreshTokens.token': refreshToken });
+        const speaker = await Speaker.findOne({ 'sessions.refreshTokens.tokenId': refreshToken });
 
         if (!speaker) {
             return res.status(401).json({
@@ -87,7 +87,7 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        const tokenRecord = speaker.tokens?.refreshTokens?.find(rt => rt.token === refreshToken);
+        const tokenRecord = speaker.sessions?.refreshTokens?.find(rt => rt.tokenId === refreshToken);
         if (!tokenRecord) {
             return res.status(401).json({
                 success: false,

@@ -37,7 +37,7 @@ const protect = async (req, res, next) => {
 
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-            const host = await Host.findById(decoded.id).select('-password -tokens');
+            const host = await Host.findById(decoded.id).select('-security.passwordHash -sessions');
             
             if (!host) {
                 return res.status(404).json({
@@ -46,14 +46,14 @@ const protect = async (req, res, next) => {
                 });
             }
 
-            if (!host.isActive) {
+            if (!host.account?.status?.isActive) {
                 return res.status(403).json({
                     success: false,
                     message: 'Host account is inactive'
                 });
             }
 
-            req.host = host;
+            req.hostUser = host;
             next();
         } catch (error) {
             return res.status(401).json({
@@ -78,7 +78,7 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        const host = await Host.findOne({ 'tokens.refreshTokens.token': refreshToken });
+        const host = await Host.findOne({ 'sessions.refreshTokens.tokenId': refreshToken });
 
         if (!host) {
             return res.status(401).json({
@@ -87,7 +87,7 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        const tokenRecord = host.tokens?.refreshTokens?.find(rt => rt.token === refreshToken);
+        const tokenRecord = host.sessions?.refreshTokens?.find(rt => rt.tokenId === refreshToken);
         if (!tokenRecord) {
             return res.status(401).json({
                 success: false,
@@ -95,7 +95,7 @@ const verifyRefreshToken = async (req, res, next) => {
             });
         }
 
-        req.host = host;
+        req.hostUser = host;
         next();
     } catch (error) {
         return res.status(401).json({

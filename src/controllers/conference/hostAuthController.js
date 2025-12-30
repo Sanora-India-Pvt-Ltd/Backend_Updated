@@ -11,7 +11,7 @@ const {
 const StorageService = require('../../services/storage.service');
 
 // Host Signup
-const signup = async (req, res) => {
+const signup = async (req, res, next) => {
     try {
         const result = await signupEntity({
             entityType: 'host',
@@ -132,7 +132,7 @@ const uploadProfileImage = async (req, res) => {
             });
         }
 
-        const host = req.host; // From protect middleware
+        const host = req.hostUser; // From protect middleware
 
         // Validate that it's an image
         const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
@@ -144,12 +144,12 @@ const uploadProfileImage = async (req, res) => {
         }
 
         // Delete old profile image from S3 if it exists
-        if (host.profileImage) {
+        if (host.profile?.images?.avatar) {
             try {
                 // Extract key from URL
                 // Format: https://bucket.s3.region.amazonaws.com/key or https://bucket.s3-region.amazonaws.com/key
                 let key = null;
-                const url = host.profileImage;
+                const url = host.profile.images.avatar;
                 
                 // Try to extract key from S3 URL
                 if (url.includes('.s3.') || url.includes('.s3-')) {
@@ -185,12 +185,12 @@ const uploadProfileImage = async (req, res) => {
             throw new Error('Invalid file object: missing path (diskStorage) or location/key (multer-s3)');
         }
 
-        // Update host's profileImage field
+        // Update host's profile image field
         const updatedHost = await Host.findByIdAndUpdate(
             host._id,
-            { profileImage: uploadResult.url },
+            { 'profile.images.avatar': uploadResult.url },
             { new: true, runValidators: true }
-        ).select('-password -tokens');
+        ).select('-security.passwordHash -sessions');
 
         return res.status(200).json({
             success: true,
@@ -199,9 +199,9 @@ const uploadProfileImage = async (req, res) => {
                 url: uploadResult.url,
                 host: {
                     _id: updatedHost._id,
-                    email: updatedHost.email,
-                    name: updatedHost.name,
-                    profileImage: updatedHost.profileImage
+                    email: updatedHost.account.email,
+                    name: updatedHost.profile.name,
+                    profileImage: updatedHost.profile.images.avatar
                 }
             }
         });

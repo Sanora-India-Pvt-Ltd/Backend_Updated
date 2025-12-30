@@ -1,5 +1,10 @@
 const mongoose = require('mongoose');
 
+// Ensure Speaker and Host models are loaded and registered before Conference schema uses them
+// This is required for populate operations to work with discriminator models
+require('./Speaker');
+require('./Host');
+
 const conferenceSchema = new mongoose.Schema({
     title: {
         type: String,
