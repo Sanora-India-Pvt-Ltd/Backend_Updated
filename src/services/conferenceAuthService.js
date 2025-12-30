@@ -83,8 +83,8 @@ const signupEntity = async ({
     }
 
     // Check for existing account with case-insensitive email match
-    const emailRegex = new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    const existing = await Model.findOne({ 'account.email': emailRegex });
+    const emailSearchRegex = new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const existing = await Model.findOne({ 'account.email': emailSearchRegex });
     if (existing) {
         return {
             status: 400,
@@ -308,8 +308,8 @@ const loginEntity = async ({
     // Query for the entity - use case-insensitive regex to handle any existing data
     // that might not be lowercase (from before schema update)
     // The regex is anchored (^ and $) so MongoDB can still use the index efficiently
-    const emailRegex = new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    const entity = await Model.findOne({ 'account.email': emailRegex });
+    const emailSearchRegex = new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const entity = await Model.findOne({ 'account.email': emailSearchRegex });
 
     if (!entity) {
         // Log for debugging (remove in production or use proper logger)

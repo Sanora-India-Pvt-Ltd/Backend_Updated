@@ -432,7 +432,7 @@ const addQuestion = async (req, res) => {
     try {
         const { conferenceId } = req.params;
         const { order, questionText, options, correctOption } = req.body;
-        const userId = req.user._id;
+        const userId = req.user?._id || req.hostUser?._id || req.speaker?._id;
         const conference = req.conference;
         const userRole = req.userRole;
 
@@ -480,20 +480,33 @@ const addQuestion = async (req, res) => {
 
         if (userRole === ROLES.HOST) {
             createdByRole = 'HOST';
-            createdById = userId;
-            createdByModel = 'User';
+            // Check if authenticated as Host or User
+            if (req.hostUser) {
+                createdById = req.hostUser._id;
+                createdByModel = 'Host';
+            } else {
+                createdById = userId;
+                createdByModel = 'User';
+            }
         } else {
             // SPEAKER
             createdByRole = 'SPEAKER';
-            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
-            if (!speaker) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Speaker profile not found'
-                });
+            // Check if authenticated as Speaker directly
+            if (req.speaker) {
+                createdById = req.speaker._id;
+                createdByModel = 'Speaker';
+            } else {
+                // Legacy: User authenticated as speaker, need to find speaker by email
+                const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
+                if (!speaker) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Speaker profile not found'
+                    });
+                }
+                createdById = speaker._id;
+                createdByModel = 'Speaker';
             }
-            createdById = speaker._id;
-            createdByModel = 'Speaker';
         }
 
         // Get max order if not provided
