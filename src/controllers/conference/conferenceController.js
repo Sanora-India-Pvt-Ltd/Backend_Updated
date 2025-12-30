@@ -13,6 +13,29 @@ const mongoose = require('mongoose');
 const HOST_OWNER_SELECT = 'account.email account.phone account.role account.status profile.name profile.bio profile.images.avatar profile.images.cover verification.isVerified';
 
 /**
+ * Helper function to find conference by ID or public code
+ * @param {string} identifier - Either MongoDB ObjectId or public code
+ * @returns {Promise<Object|null>} Conference document or null
+ */
+const findConferenceByIdOrCode = async (identifier) => {
+    // Check if identifier is a valid ObjectId (24 hex characters)
+    if (mongoose.Types.ObjectId.isValid(identifier) && identifier.length === 24) {
+        // Try to find by ObjectId first
+        const conference = await Conference.findById(identifier);
+        if (conference) {
+            return conference;
+        }
+    }
+    
+    // If not found by ObjectId or not a valid ObjectId, try public code
+    // Public codes are uppercase, so convert to uppercase
+    const conference = await Conference.findOne({ 
+        publicCode: identifier.toUpperCase().trim() 
+    });
+    return conference;
+};
+
+/**
  * Generate unique public code for conference
  */
 const generatePublicCode = () => {
@@ -767,7 +790,8 @@ const getLiveQuestion = async (req, res) => {
         const { conferenceId } = req.params;
         const userId = req.user._id;
 
-        const conference = await Conference.findById(conferenceId);
+        // Find conference by ID or public code
+        const conference = await findConferenceByIdOrCode(conferenceId);
         if (!conference) {
             return res.status(404).json({
                 success: false,
@@ -783,8 +807,9 @@ const getLiveQuestion = async (req, res) => {
             });
         }
 
+        // Use the actual conference _id for the query
         const liveQuestion = await ConferenceQuestion.findOne({
-            conferenceId,
+            conferenceId: conference._id,
             isLive: true,
             status: 'ACTIVE'
         });
@@ -834,7 +859,8 @@ const answerQuestion = async (req, res) => {
         const { selectedOption } = req.body;
         const userId = req.user._id;
 
-        const conference = await Conference.findById(conferenceId);
+        // Find conference by ID or public code
+        const conference = await findConferenceByIdOrCode(conferenceId);
         if (!conference) {
             return res.status(404).json({
                 success: false,
@@ -850,7 +876,7 @@ const answerQuestion = async (req, res) => {
         }
 
         const question = await ConferenceQuestion.findById(questionId);
-        if (!question || question.conferenceId.toString() !== conferenceId) {
+        if (!question || question.conferenceId.toString() !== conference._id.toString()) {
             return res.status(404).json({
                 success: false,
                 message: 'Question not found'
@@ -1230,7 +1256,8 @@ const requestGroupJoin = async (req, res) => {
         const { conferenceId } = req.params;
         const userId = req.user._id;
 
-        const conference = await Conference.findById(conferenceId);
+        // Find conference by ID or public code
+        const conference = await findConferenceByIdOrCode(conferenceId);
         if (!conference) {
             return res.status(404).json({
                 success: false,
@@ -1371,7 +1398,8 @@ const getConferenceMaterials = async (req, res) => {
         const userId = req.user._id;
         const userRole = req.userRole;
 
-        const conference = await Conference.findById(conferenceId);
+        // Find conference by ID or public code
+        const conference = await findConferenceByIdOrCode(conferenceId);
         if (!conference) {
             return res.status(404).json({
                 success: false,
@@ -1409,11 +1437,11 @@ const getConferenceMaterials = async (req, res) => {
             });
         }
 
-        // Get materials
-        const questions = await ConferenceQuestion.find({ conferenceId })
+        // Get materials - use actual conference _id
+        const questions = await ConferenceQuestion.find({ conferenceId: conference._id })
             .sort({ order: 1 });
 
-        const media = await ConferenceMedia.find({ conferenceId })
+        const media = await ConferenceMedia.find({ conferenceId: conference._id })
             .populate('mediaId')
             .sort({ uploadedAt: -1 });
 

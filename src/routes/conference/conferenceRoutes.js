@@ -101,8 +101,12 @@ const {
     getAnalytics,
     requestGroupJoin,
     reviewGroupJoinRequest,
-    getConferenceMaterials
+    getConferenceMaterials,
+    getConferenceByPublicCode
 } = require('../../controllers/conference/conferenceController');
+
+// Public conference access by public code (no auth required)
+router.get('/public/:publicCode', getConferenceByPublicCode);
 
 // Conference CRUD routes
 router.post('/', multiAuth, requireHostOrSuperAdmin, createConference);

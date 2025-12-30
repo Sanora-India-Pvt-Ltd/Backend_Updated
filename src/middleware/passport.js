@@ -12,7 +12,7 @@ const callbackURL = process.env.GOOGLE_CALLBACK_URL ||
      (process.env.NODE_ENV === 'production' && process.env.BACKEND_URL
        ? `${process.env.BACKEND_URL}/api/auth/google/callback`
        : process.env.NODE_ENV === 'production'
-       ? 'https://api.ulearnandearn.com/api/auth/google/callback'
+       ? 'http://13.203.123.56:3100/api/auth/google/callback'
        : `http://localhost:${process.env.PORT || 3100}/api/auth/google/callback`);
 
 console.log('GOOGLE_CALLBACK_URL:', callbackURL);
@@ -21,7 +21,7 @@ console.log('GOOGLE_CALLBACK_URL:', callbackURL);
 if (process.env.NODE_ENV === 'production' && callbackURL.includes('localhost')) {
     console.warn('⚠️  WARNING: NODE_ENV is "production" but using localhost URL!');
     console.warn('   This will cause DNS errors. Set BACKEND_URL or use production domain.');
-} else if (!process.env.NODE_ENV && callbackURL.includes('api.ulearnandearn.com')) {
+} else if (!process.env.NODE_ENV && callbackURL.includes('13.203.123.56:3100')) {
     console.warn('⚠️  WARNING: Using production URL without NODE_ENV=production');
     console.warn('   Set NODE_ENV=development for local development');
 }

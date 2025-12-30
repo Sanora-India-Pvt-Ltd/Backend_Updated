@@ -455,10 +455,10 @@ const googleCallback = (req, res, next) => {
         // Default to localhost unless explicitly in production with BACKEND_URL set
         const backendUrl = process.env.BACKEND_URL || 
             (process.env.NODE_ENV === 'production' && !process.env.BACKEND_URL
-                ? 'https://api.ulearnandearn.com' 
+                ? 'http://13.203.123.56:3100' 
                 : `http://localhost:${process.env.PORT || 3100}`);
         
-        if (frontendUrl.includes('api.ulearnandearn.com') || frontendUrl.includes('localhost:3100')) {
+        if (frontendUrl.includes('13.203.123.56:3100') || frontendUrl.includes('localhost:3100')) {
             console.warn('⚠️  WARNING: FRONTEND_URL appears to be pointing to backend URL!');
             console.warn(`   Backend URL: ${backendUrl}`);
             console.warn(`   Frontend URL: ${frontendUrl}`);

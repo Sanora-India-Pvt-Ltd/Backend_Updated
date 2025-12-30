@@ -38,6 +38,22 @@ const conferenceSchema = new mongoose.Schema({
         uppercase: true,
         trim: true
     },
+    qrCodeImage: {
+        type: String,
+        default: null
+    },
+    date: {
+        type: Date,
+        default: null
+    },
+    startTime: {
+        type: Date,
+        default: null
+    },
+    endTime: {
+        type: Date,
+        default: null
+    },
     status: {
         type: String,
         enum: ['DRAFT', 'ACTIVE', 'ENDED'],
@@ -63,6 +79,7 @@ conferenceSchema.index({ speakers: 1, createdAt: -1 });
 conferenceSchema.index({ status: 1, createdAt: -1 });
 conferenceSchema.index({ groupId: 1 });
 conferenceSchema.index({ ownerModel: 1, hostId: 1 });
+conferenceSchema.index({ date: 1, startTime: 1 }); // For querying conferences by date/time
 
 module.exports = mongoose.model('Conference', conferenceSchema);
 
