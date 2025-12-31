@@ -359,13 +359,16 @@ Speaker signup also **requires email and phone OTP verification first** using th
     "hostId": "host_id",
     "speakers": [...],
     "publicCode": "ABC123",
+    "qrCodeImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "status": "DRAFT",
     "createdAt": "2024-01-15T10:00:00Z"
   }
 }
 ```
 
-**Note:** When a **Speaker** creates a conference using their speaker token, they become the owner (`hostId` points to the speaker account and `ownerModel` is `Speaker`). When a **Host** or **SUPER_ADMIN** user creates a conference, `hostId` and `ownerModel` reflect that host/user instead.
+**Note:** 
+- When a **Speaker** creates a conference using their speaker token, they become the owner (`hostId` points to the speaker account and `ownerModel` is `Speaker`). When a **Host** or **SUPER_ADMIN** user creates a conference, `hostId` and `ownerModel` reflect that host/user instead.
+- **QR Code Generation:** A QR code is automatically generated when a conference is created. The QR code contains a URL pointing to `/api/conference/public/{publicCode}` which enables easy access to the conference. The QR code image is stored as a Base64 data URL in the `qrCodeImage` field.
 
 #### 2. Get All Conferences
 **GET** `/api/conference`
@@ -406,6 +409,7 @@ Speaker signup also **requires email and phone OTP verification first** using th
     "title": "Tech Conference 2024",
     "status": "ACTIVE",
     "publicCode": "ABC123",
+    "qrCodeImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "userRole": "HOST" // or "SPEAKER", "USER", "SUPER_ADMIN"
   }
 }
@@ -460,6 +464,37 @@ Speaker signup also **requires email and phone OTP verification first** using th
 ```
 
 **Note:** Automatically creates a group conversation for post-conference discussions.
+
+#### 7. Regenerate QR Code
+**POST** `/api/conference/:conferenceId/qr-code/regenerate`
+
+**Auth:** HOST, SPEAKER, or SUPER_ADMIN
+
+**Description:** Regenerates the QR code for an existing conference. Useful if the QR code was not generated during creation or needs to be updated. Speakers can regenerate QR codes for conferences they are assigned to.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "QR code regenerated successfully",
+  "data": {
+    "_id": "conference_id",
+    "title": "Tech Conference 2024",
+    "publicCode": "ABC123",
+    "qrCodeImage": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
+    "status": "DRAFT"
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "message": "Failed to generate QR code",
+  "error": "Error details here"
+}
+```
 
 ---
 
@@ -850,6 +885,7 @@ Speaker signup also **requires email and phone OTP verification first** using th
 | Create conference | ✅ | ✅ | ✅ | ❌ |
 | Update conference | ✅ | ✅ | ❌ | ❌ |
 | Activate/End conference | ✅ | ✅ | ❌ | ❌ |
+| Regenerate QR code | ✅ | ✅ | ✅ | ❌ |
 | Add question | ✅ | ✅ | ✅ (own only) | ❌ |
 | Update question | ✅ | ✅ (any) | ✅ (own only) | ❌ |
 | Delete question | ✅ | ✅ (any) | ✅ (own only) | ❌ |
@@ -891,7 +927,15 @@ Speaker signup also **requires email and phone OTP verification first** using th
    - SUPER_ADMIN approves/rejects requests
    - Only approved members can access materials
 
-6. **Token Management:**
+6. **QR Code Management:**
+   - QR codes are automatically generated when a conference is created
+   - QR code contains URL: `/api/conference/public/{publicCode}`
+   - QR code image is stored as Base64 data URL in `qrCodeImage` field
+   - HOST, SPEAKER, or SUPER_ADMIN can regenerate QR codes using the regenerate endpoint
+   - Speakers can regenerate QR codes for conferences they are assigned to
+   - If QR code generation fails during creation, the conference is still created (QR code can be regenerated later)
+
+7. **Token Management:**
    - Access tokens expire in 1 hour
    - Refresh tokens last 100 years (until logout)
    - Maximum 5 devices per account
@@ -915,7 +959,7 @@ curl -X POST http://localhost:3100/api/host/auth/signup \
     "phoneVerificationToken": "<from verify-phone-otp-signup>"
   }'
 
-# 2. Create Conference
+# 2. Create Conference (QR code is automatically generated)
 curl -X POST http://localhost:3100/api/conference \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <host_accessToken>" \
@@ -924,6 +968,16 @@ curl -X POST http://localhost:3100/api/conference \
     "description": "Annual tech conference",
     "speakerIds": []
   }'
+
+# Response includes qrCodeImage field with Base64 encoded QR code
+```
+
+### Regenerating QR Code for Existing Conference
+
+```bash
+# Regenerate QR code (if it wasn't generated or needs to be updated)
+curl -X POST http://localhost:3100/api/conference/:conferenceId/qr-code/regenerate \
+  -H "Authorization: Bearer <host_accessToken>"
 ```
 
 ### Speaker Creating a Conference

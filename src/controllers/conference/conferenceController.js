@@ -8,6 +8,7 @@ const GroupJoinRequest = require('../../models/GroupJoinRequest');
 const Media = require('../../models/Media');
 const User = require('../../models/authorization/User');
 const { getUserConferenceRole, ROLES } = require('../../middleware/conferenceRoles');
+const { generateQRCode } = require('../../../services/qrService');
 const mongoose = require('mongoose');
 
 const HOST_OWNER_SELECT = 'account.email account.phone account.role account.status profile.name profile.bio profile.images.avatar profile.images.cover verification.isVerified';
@@ -127,6 +128,16 @@ const createConference = async (req, res) => {
             publicCode,
             status: 'DRAFT'
         });
+
+        // Generate QR code for the conference
+        try {
+            const qrCodeImage = await generateQRCode(publicCode);
+            conference.qrCodeImage = qrCodeImage;
+            await conference.save();
+        } catch (qrError) {
+            console.error('Failed to generate QR code for conference:', qrError);
+            // Continue without QR code - it can be generated later if needed
+        }
 
         await conference.populate('hostId', HOST_OWNER_SELECT);
         await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
@@ -1507,6 +1518,54 @@ const getConferenceByPublicCode = async (req, res) => {
     }
 };
 
+/**
+ * Regenerate QR code for conference (HOST/SPEAKER/SUPER_ADMIN)
+ */
+const regenerateQRCode = async (req, res) => {
+    try {
+        const conference = req.conference;
+        const userRole = req.userRole;
+
+        // Check permissions
+        if (userRole !== ROLES.HOST && userRole !== ROLES.SPEAKER && userRole !== ROLES.SUPER_ADMIN) {
+            return res.status(403).json({
+                success: false,
+                message: 'Only HOST, SPEAKER, or SUPER_ADMIN can regenerate QR code'
+            });
+        }
+
+        // Generate QR code
+        try {
+            const qrCodeImage = await generateQRCode(conference.publicCode);
+            conference.qrCodeImage = qrCodeImage;
+            await conference.save();
+
+            await conference.populate('hostId', HOST_OWNER_SELECT);
+            await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
+
+            res.json({
+                success: true,
+                data: conference,
+                message: 'QR code regenerated successfully'
+            });
+        } catch (qrError) {
+            console.error('Failed to generate QR code:', qrError);
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to generate QR code',
+                error: qrError.message
+            });
+        }
+    } catch (error) {
+        console.error('Regenerate QR code error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to regenerate QR code',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     createConference,
     getConferences,
@@ -1528,6 +1587,7 @@ module.exports = {
     requestGroupJoin,
     reviewGroupJoinRequest,
     getConferenceMaterials,
-    getConferenceByPublicCode
+    getConferenceByPublicCode,
+    regenerateQRCode
 };
 

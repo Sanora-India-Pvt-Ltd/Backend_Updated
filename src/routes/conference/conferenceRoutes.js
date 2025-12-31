@@ -102,7 +102,8 @@ const {
     requestGroupJoin,
     reviewGroupJoinRequest,
     getConferenceMaterials,
-    getConferenceByPublicCode
+    getConferenceByPublicCode,
+    regenerateQRCode
 } = require('../../controllers/conference/conferenceController');
 
 // Public conference access by public code (no auth required)
@@ -115,6 +116,7 @@ router.get('/:conferenceId', multiAuth, attachConferenceRole, getConferenceById)
 router.put('/:conferenceId', multiAuth, requireConferenceRole(ROLES.HOST, ROLES.SUPER_ADMIN), updateConference);
 router.post('/:conferenceId/activate', multiAuth, requireConferenceRole(ROLES.HOST, ROLES.SUPER_ADMIN), activateConference);
 router.post('/:conferenceId/end', multiAuth, requireConferenceRole(ROLES.HOST, ROLES.SUPER_ADMIN), endConference);
+router.post('/:conferenceId/qr-code/regenerate', multiAuth, requireConferenceRole(ROLES.HOST, ROLES.SPEAKER, ROLES.SUPER_ADMIN), regenerateQRCode);
 
 // Question routes
 router.post('/:conferenceId/questions', multiAuth, requireConferenceRole(ROLES.HOST, ROLES.SPEAKER), addQuestion);
