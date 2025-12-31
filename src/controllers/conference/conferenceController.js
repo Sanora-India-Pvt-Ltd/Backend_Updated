@@ -1465,6 +1465,48 @@ const getConferenceMaterials = async (req, res) => {
     }
 };
 
+/**
+ * Get conference by public code (public route, no auth required)
+ */
+const getConferenceByPublicCode = async (req, res) => {
+    try {
+        const { publicCode } = req.params;
+
+        if (!publicCode) {
+            return res.status(400).json({
+                success: false,
+                message: 'Public code is required'
+            });
+        }
+
+        // Find conference by public code
+        const conference = await Conference.findOne({ 
+            publicCode: publicCode.toUpperCase().trim() 
+        })
+            .populate('hostId', HOST_OWNER_SELECT)
+            .populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
+
+        if (!conference) {
+            return res.status(404).json({
+                success: false,
+                message: 'Conference not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: conference
+        });
+    } catch (error) {
+        console.error('Get conference by public code error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch conference',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     createConference,
     getConferences,
@@ -1485,6 +1527,7 @@ module.exports = {
     getAnalytics,
     requestGroupJoin,
     reviewGroupJoinRequest,
-    getConferenceMaterials
+    getConferenceMaterials,
+    getConferenceByPublicCode
 };
 
