@@ -731,6 +731,23 @@ try {
     });
 }
 
+// Conference results routes
+try {
+    console.log('🔄 Loading conference results routes...');
+    app.use('/api/conference', require('./routes/conference/conferenceResultsRoutes'));
+    console.log('✅ Conference results routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading conference results routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/conference', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Conference results routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Marketplace seller routes
 try {
     console.log('🔄 Loading marketplace seller routes...');
@@ -1246,12 +1263,18 @@ if (registeredRoutes.length > 0) {
 // Create HTTP server for Socket.IO
 const httpServer = http.createServer(app);
 
+// Initialize Redis connection for conference polling
+const { initRedis } = require('./config/redisConnection');
+
 // Initialize Socket.IO server (must be awaited to ensure Redis connections are ready)
 const { initSocketServer } = require('./socket/socketServer');
 
 // Start server after Socket.IO is initialized
 (async () => {
     try {
+        // Initialize Redis (falls back to in-memory if not configured)
+        await initRedis();
+        
         await initSocketServer(httpServer);
         
         // Start server
@@ -1280,8 +1303,15 @@ const { initSocketServer } = require('./socket/socketServer');
     } else {
         console.log('✅ Email configuration looks good!');
     }
-    console.log('ℹ️  Redis disabled - using in-memory cache and presence tracking');
-    console.log('   This is suitable for single-server deployments.');
+    const { isRedisReady } = require('./config/redisConnection');
+    if (isRedisReady()) {
+        console.log('✅ Redis enabled - conference polling can scale horizontally');
+    } else {
+        console.log('ℹ️  Redis disabled - using in-memory cache and presence tracking');
+        console.log('   This is suitable for single-server deployments.');
+        console.log('   Set REDIS_URL environment variable to enable horizontal scaling.');
+    }
+    console.log('📊 Conference polling: Real-time voting with Socket.IO');
         });
     } catch (error) {
         console.error('❌ Failed to initialize Socket.IO server:', error);
@@ -1289,13 +1319,17 @@ const { initSocketServer } = require('./socket/socketServer');
     }
 })();
 
-// ✅ Graceful shutdown: Redis connections are handled by stub (no-op)
+// ✅ Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('🛑 SIGTERM received, shutting down gracefully...');
+    const { closeRedis } = require('./config/redisConnection');
+    await closeRedis();
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
     console.log('🛑 SIGINT received, shutting down gracefully...');
+    const { closeRedis } = require('./config/redisConnection');
+    await closeRedis();
     process.exit(0);
 });

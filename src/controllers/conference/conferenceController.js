@@ -139,6 +139,11 @@ const createConference = async (req, res) => {
             // Continue without QR code - it can be generated later if needed
         }
 
+        // Initialize Redis state for conference
+        const { conferenceService } = require('../../services/conferencePollingService');
+        await conferenceService.setStatus(conference._id.toString(), 'DRAFT');
+        await conferenceService.setHost(conference._id.toString(), hostId.toString());
+
         await conference.populate('hostId', HOST_OWNER_SELECT);
         await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
 
@@ -364,6 +369,11 @@ const activateConference = async (req, res) => {
         conference.status = 'ACTIVE';
         await conference.save();
 
+        // Sync status to Redis for real-time polling
+        const { conferenceService } = require('../../services/conferencePollingService');
+        await conferenceService.setStatus(conference._id.toString(), 'ACTIVE');
+        await conferenceService.setHost(conference._id.toString(), conference.hostId.toString());
+
         await conference.populate('hostId', HOST_OWNER_SELECT);
         await conference.populate('speakers', 'account.email account.phone profile.name profile.bio profile.images.avatar');
 
@@ -415,6 +425,10 @@ const endConference = async (req, res) => {
         // End conference
         conference.status = 'ENDED';
         conference.endedAt = new Date();
+
+        // Sync status to Redis for real-time polling
+        const { conferenceService } = require('../../services/conferencePollingService');
+        await conferenceService.setStatus(conference._id.toString(), 'ENDED');
 
         // Create group if not exists
         if (!conference.groupId) {
