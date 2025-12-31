@@ -784,8 +784,8 @@ const pushQuestionLive = async (req, res) => {
         }
 
         // Get Socket.IO instance and Redis client
-        const { getIO } = require('../socket/socketServer');
-        const { getRedis } = require('../config/redisConnection');
+        const { getIO } = require('../../socket/socketServer');
+        const { getRedis } = require('../../config/redisConnection');
         const io = getIO();
         const redis = getRedis();
 
@@ -845,7 +845,7 @@ const pushQuestionLive = async (req, res) => {
         }
 
         // Start server-side timer for auto-closing
-        const { questionTimers } = require('../socket/socketServer');
+        const { questionTimers } = require('../../socket/socketServer');
         
         // Clear any existing timer for this conference
         if (questionTimers && questionTimers.has(conferenceId)) {
