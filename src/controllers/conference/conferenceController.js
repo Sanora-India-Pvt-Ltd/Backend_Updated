@@ -745,6 +745,7 @@ const deleteQuestion = async (req, res) => {
 const pushQuestionLive = async (req, res) => {
     try {
         const { conferenceId, questionId } = req.params;
+        const { duration = 45 } = req.body; // Optional duration, default 45 seconds
         const userRole = req.userRole;
 
         // Check permissions
@@ -782,20 +783,192 @@ const pushQuestionLive = async (req, res) => {
             }
         }
 
-        // Close any existing live question
+        // Get Socket.IO instance and Redis client
+        const { getIO } = require('../socket/socketServer');
+        const { getRedis } = require('../config/redisConnection');
+        const io = getIO();
+        const redis = getRedis();
+
+        if (!redis) {
+            return res.status(500).json({
+                success: false,
+                message: 'Redis is required for live questions'
+            });
+        }
+
+        // Calculate timestamps
+        const startedAt = Date.now();
+        const expiresAt = startedAt + (duration * 1000);
+        const ttlSeconds = duration + 5; // TTL = duration + 5 seconds buffer
+
+        // Prepare live question data
+        const liveQuestionData = {
+            conferenceId,
+            questionId: question._id.toString(),
+            questionText: question.questionText,
+            options: question.options.map(opt => ({
+                key: opt.key,
+                text: opt.text
+            })),
+            startedAt,
+            expiresAt,
+            duration
+        };
+
+        const liveQuestionKey = `conference:${conferenceId}:live_question`;
+
+        // Use SET with NX to atomically create live question (prevents race conditions)
+        const setResult = await redis.set(
+            liveQuestionKey,
+            JSON.stringify(liveQuestionData),
+            'NX'
+        );
+
+        if (!setResult) {
+            // Key already exists - check if it's the same question
+            const existingLiveQuestion = await redis.get(liveQuestionKey);
+            if (existingLiveQuestion) {
+                const existing = JSON.parse(existingLiveQuestion);
+                if (existing.questionId === questionId) {
+                    // Same question, update it
+                    await redis.setex(liveQuestionKey, ttlSeconds, JSON.stringify(liveQuestionData));
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Another question (${existing.questionId}) is already live. Close it first.`
+                    });
+                }
+            }
+        } else {
+            // SET NX succeeded - set TTL
+            await redis.expire(liveQuestionKey, ttlSeconds);
+        }
+
+        // Start server-side timer for auto-closing
+        const { questionTimers } = require('../socket/socketServer');
+        
+        // Clear any existing timer for this conference
+        if (questionTimers && questionTimers.has(conferenceId)) {
+            clearTimeout(questionTimers.get(conferenceId));
+        }
+        
+        const timerDuration = expiresAt - Date.now();
+        if (timerDuration > 0) {
+            const timeoutId = setTimeout(async () => {
+                try {
+                    const liveQuestionKey = `conference:${conferenceId}:live_question`;
+                    const liveQuestionData = await redis.get(liveQuestionKey);
+                    
+                    if (!liveQuestionData) {
+                        questionTimers.delete(conferenceId);
+                        return;
+                    }
+                    
+                    const liveQuestion = JSON.parse(liveQuestionData);
+                    const answersKey = `conference:${conferenceId}:answers:${liveQuestion.questionId}`;
+                    const closedAt = Date.now();
+                    
+                    // Calculate final results
+                    const allAnswers = await redis.hgetall(answersKey);
+                    const totalResponses = Object.keys(allAnswers).length;
+                    
+                    const counts = {};
+                    liveQuestion.options.forEach(opt => {
+                        counts[opt.key] = 0;
+                    });
+                    
+                    Object.values(allAnswers).forEach(answerKey => {
+                        if (counts.hasOwnProperty(answerKey)) {
+                            counts[answerKey] = (counts[answerKey] || 0) + 1;
+                        }
+                    });
+                    
+                    // Save to MongoDB
+                    const updateResult = await ConferenceQuestion.findOneAndUpdate(
+                        {
+                            _id: liveQuestion.questionId,
+                            conferenceId: conferenceId,
+                            status: { $ne: 'CLOSED' }
+                        },
+                        {
+                            $set: {
+                                status: 'CLOSED',
+                                results: {
+                                    counts,
+                                    totalResponses,
+                                    closedAt
+                                }
+                            }
+                        },
+                        { new: true }
+                    );
+                    
+                    if (updateResult) {
+                        // Emit events
+                        io.to(`conference:${conferenceId}`).emit('question:closed', {
+                            conferenceId,
+                            questionId: liveQuestion.questionId,
+                            closedAt
+                        });
+                        
+                        io.to(`conference:${conferenceId}`).emit('question:results', {
+                            conferenceId,
+                            questionId: liveQuestion.questionId,
+                            counts,
+                            totalResponses,
+                            closedAt
+                        });
+                        
+                        // Cleanup Redis
+                        await redis.del(liveQuestionKey);
+                        await redis.del(answersKey);
+                    }
+                    
+                } catch (error) {
+                    console.error('Timer error during auto-close:', error);
+                    if (questionTimers) {
+                        questionTimers.delete(conferenceId);
+                    }
+                }
+            }, timerDuration);
+            
+            // Store timer ID in Map to prevent duplicates
+            if (questionTimers) {
+                questionTimers.set(conferenceId, timeoutId);
+            }
+        }
+
+        // Emit question:live event to all connected clients
+        io.to(`conference:${conferenceId}`).emit('question:live', {
+            conferenceId,
+            questionId: question._id.toString(),
+            questionText: question.questionText,
+            options: question.options.map(opt => ({
+                key: opt.key,
+                text: opt.text
+            })),
+            startedAt,
+            expiresAt
+        });
+
+        // Close any existing live question in MongoDB (for backward compatibility)
         await ConferenceQuestion.updateMany(
             { conferenceId, isLive: true, _id: { $ne: questionId } },
             { isLive: false, status: 'CLOSED' }
         );
 
-        // Set new question as live
+        // Set new question as live in MongoDB
         question.isLive = true;
         question.status = 'ACTIVE';
         await question.save();
 
         res.json({
             success: true,
-            data: question
+            data: {
+                ...question.toObject(),
+                startedAt,
+                expiresAt
+            }
         });
     } catch (error) {
         console.error('Push question live error:', error);

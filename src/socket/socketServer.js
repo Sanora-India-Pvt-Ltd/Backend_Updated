@@ -1145,7 +1145,8 @@ const getIO = () => {
 
 module.exports = {
     initSocketServer,
-    getIO
+    getIO,
+    questionTimers // Export for REST API to use
 };
 
 /* ============================================
