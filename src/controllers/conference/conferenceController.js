@@ -402,7 +402,7 @@ const endConference = async (req, res) => {
         const userId = req.user._id;
 
         // Check permissions
-        if (userRole !== ROLES.HOST && userRole !== ROLES.SUPER_ADMIN && userRole !== ROLES.SPEAKER) {
+        if (userRole !== ROLES.HOST && userRole !== ROLES.SUPER_ADMIN ) {
             return res.status(403).json({
                 success: false,
                 message: 'Only HOST, SUPER_ADMIN or SPEAKER can end conference'
