@@ -25,7 +25,7 @@ const initRedis = async () => {
     }
 
     try {
-        // Create main Redis client
+        // Create main Redis client with error handling
         redisClient = new Redis(redisUrl, {
             retryStrategy: (times) => {
                 const delay = Math.min(times * 50, 2000);
@@ -33,7 +33,9 @@ const initRedis = async () => {
             },
             maxRetriesPerRequest: 3,
             enableReadyCheck: true,
-            enableOfflineQueue: false
+            enableOfflineQueue: false,
+            connectTimeout: 10000, // 10 second timeout
+            commandTimeout: 5000 // 5 second command timeout
         });
 
         // Create subscriber client (required for pub/sub)
@@ -44,7 +46,9 @@ const initRedis = async () => {
             },
             maxRetriesPerRequest: 3,
             enableReadyCheck: true,
-            enableOfflineQueue: false
+            enableOfflineQueue: false,
+            connectTimeout: 10000,
+            commandTimeout: 5000
         });
 
         // Create publisher client (required for pub/sub)
@@ -55,15 +59,53 @@ const initRedis = async () => {
             },
             maxRetriesPerRequest: 3,
             enableReadyCheck: true,
-            enableOfflineQueue: false
+            enableOfflineQueue: false,
+            connectTimeout: 10000,
+            commandTimeout: 5000
         });
 
-        // Wait for connection
-        await Promise.all([
-            redisClient.ping(),
-            redisSubscriber.ping(),
-            redisPublisher.ping()
+        // Add error handlers to prevent unhandled errors
+        redisClient.on('error', (error) => {
+            console.error('Redis client error:', error.message);
+            // Don't set isRedisAvailable = false here, let connection retry
+            // Only set to false if connection completely fails
+        });
+
+        redisSubscriber.on('error', (error) => {
+            console.error('Redis subscriber error:', error.message);
+        });
+
+        redisPublisher.on('error', (error) => {
+            console.error('Redis publisher error:', error.message);
+        });
+
+        // Add connection error handlers
+        redisClient.on('close', () => {
+            console.warn('⚠️  Redis client connection closed');
+            isRedisAvailable = false;
+        });
+
+        redisSubscriber.on('close', () => {
+            console.warn('⚠️  Redis subscriber connection closed');
+        });
+
+        redisPublisher.on('close', () => {
+            console.warn('⚠️  Redis publisher connection closed');
+        });
+
+        // Wait for connection with timeout
+        const connectionPromise = Promise.all([
+            redisClient.ping().catch(err => { throw new Error(`Client ping failed: ${err.message}`); }),
+            redisSubscriber.ping().catch(err => { throw new Error(`Subscriber ping failed: ${err.message}`); }),
+            redisPublisher.ping().catch(err => { throw new Error(`Publisher ping failed: ${err.message}`); })
         ]);
+
+        // Add timeout to connection attempt
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Redis connection timeout')), 10000);
+        });
+
+        await Promise.race([connectionPromise, timeoutPromise]);
 
         isRedisAvailable = true;
         console.log('✅ Redis connected successfully for conference polling');
@@ -128,39 +170,32 @@ const isRedisReady = () => {
  */
 const closeRedis = async () => {
     if (redisClient) {
-        await redisClient.quit();
+        try {
+            await redisClient.quit();
+        } catch (error) {
+            console.error('Error closing Redis client:', error.message);
+        }
         redisClient = null;
     }
     if (redisSubscriber) {
-        await redisSubscriber.quit();
+        try {
+            await redisSubscriber.quit();
+        } catch (error) {
+            console.error('Error closing Redis subscriber:', error.message);
+        }
         redisSubscriber = null;
     }
     if (redisPublisher) {
-        await redisPublisher.quit();
+        try {
+            await redisPublisher.quit();
+        } catch (error) {
+            console.error('Error closing Redis publisher:', error.message);
+        }
         redisPublisher = null;
     }
     isRedisAvailable = false;
     console.log('🔌 Redis connections closed');
 };
-
-// Handle connection errors
-if (redisClient) {
-    redisClient.on('error', (error) => {
-        console.error('Redis client error:', error.message);
-    });
-}
-
-if (redisSubscriber) {
-    redisSubscriber.on('error', (error) => {
-        console.error('Redis subscriber error:', error.message);
-    });
-}
-
-if (redisPublisher) {
-    redisPublisher.on('error', (error) => {
-        console.error('Redis publisher error:', error.message);
-    });
-}
 
 module.exports = {
     initRedis,
