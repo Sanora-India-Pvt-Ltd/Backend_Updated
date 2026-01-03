@@ -4,8 +4,8 @@ const Institution = require('../../models/authorization/Institution');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { generateToken, generateAccessToken, generateRefreshToken } = require('../../middleware/auth');
-const { createOTPRecord, validateOTP } = require('../../services/otpService');
-const emailService = require('../../services/emailService');
+const { createOTPRecord, validateOTP } = require('../../../services/otpService');
+const emailService = require('../../../services/emailService');
 
 // Maximum number of devices a user can be logged in on simultaneously
 const MAX_DEVICES = 5;
