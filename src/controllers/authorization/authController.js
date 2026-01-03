@@ -4,6 +4,8 @@ const Institution = require('../../models/authorization/Institution');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { generateToken, generateAccessToken, generateRefreshToken } = require('../../middleware/auth');
+const { createOTPRecord, validateOTP } = require('../../services/otpService');
+const emailService = require('../../services/emailService');
 
 // Maximum number of devices a user can be logged in on simultaneously
 const MAX_DEVICES = 5;
@@ -580,9 +582,6 @@ const sendOTPForPasswordReset = async (req, res) => {
 
         // If email provided, send OTP via email
         if (email) {
-            const { createOTPRecord } = require('../../services/otpService');
-            const emailService = require('../../services/emailService');
-            
             // Check if email service is configured
             if (!emailService.transporter) {
                 return res.status(503).json({
@@ -691,7 +690,6 @@ const verifyOTPForPasswordReset = async (req, res) => {
                 });
             }
 
-            const { validateOTP } = require('../../services/otpService');
             verificationResult = await validateOTP(email.toLowerCase(), 'password_reset', otp);
         }
 
