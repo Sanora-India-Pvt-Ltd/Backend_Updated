@@ -29,11 +29,29 @@ const upload = multer({
 });
 
 // Course Routes
+// Test route to verify router is working (remove after debugging)
+router.get('/test', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Course routes are working!',
+        path: req.path,
+        method: req.method
+    });
+});
+
 router.post('/', protectUniversity, createCourse);
 router.get('/', protectUniversity, getCourses);
 router.get('/:id', protect, getCourseById); // Public or authenticated
 router.put('/:id', protectUniversity, updateCourse);
 router.delete('/:id', protectUniversity, deleteCourse);
+
+// Debug: Log registered routes
+console.log('📋 Course routes registered:');
+console.log('  GET    /api/courses (protected, university)');
+console.log('  POST   /api/courses (protected, university)');
+console.log('  GET    /api/courses/:id (protected)');
+console.log('  PUT    /api/courses/:id (protected, university)');
+console.log('  DELETE /api/courses/:id (protected, university)');
 router.post('/:id/thumbnail', protectUniversity, (req, res, next) => {
     upload.single('thumbnail')(req, res, (err) => {
         if (err) {

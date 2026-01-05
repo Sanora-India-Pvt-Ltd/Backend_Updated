@@ -20,6 +20,7 @@
 4. [Playlist Management](#playlist-management)
    - [Create Playlist](#1-create-playlist)
    - [Get Playlists](#2-get-playlists)
+   - [Get Single Playlist](#2a-get-single-playlist)
    - [Update Playlist](#3-update-playlist)
    - [Update Playlist Thumbnail](#4-update-playlist-thumbnail)
    - [Delete Playlist](#5-delete-playlist)
@@ -958,6 +959,78 @@ Get all playlists for a specific course.
 |-------------|---------------|
 | 401 | Not authorized to access this route |
 | 500 | Error retrieving playlists |
+
+---
+
+### 2a. Get Single Playlist
+
+Get a single playlist by ID with all its videos.
+
+**Endpoint:** `GET /api/playlists/:id`
+
+**Authentication:** User or University (Required - Course Owner or Enrolled User)
+
+**URL Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| id | string | Yes | Playlist ID (MongoDB ObjectId) |
+
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Playlist retrieved successfully",
+  "data": {
+    "playlist": {
+      "_id": "65a1b2c3d4e5f6g7h8i9j0k3",
+      "courseId": "65a1b2c3d4e5f6g7h8i9j0k1",
+      "details": {
+        "name": "Week 1: Introduction",
+        "description": "Introduction to the course",
+        "thumbnail": "https://s3.amazonaws.com/bucket/thumbnails/playlist-123.jpg"
+      },
+      "order": 1,
+      "createdAt": "2024-01-15T10:35:00.000Z",
+      "updatedAt": "2024-01-15T10:35:00.000Z",
+      "videos": [
+        {
+          "_id": "65a1b2c3d4e5f6g7h8i9j0k4",
+          "details": {
+            "title": "Introduction Video",
+            "thumbnail": "https://s3.amazonaws.com/bucket/thumbnails/video-456.jpg"
+          },
+          "media": {
+            "duration": 600
+          },
+          "order": 1
+        }
+      ]
+    }
+  }
+}
+```
+
+**What's Included:**
+- Full playlist details (name, description, thumbnail, order)
+- All videos in the playlist (sorted by order)
+- Each video includes title, thumbnail, and duration
+
+**Access Control:**
+- **Course owners (universities)** can access any playlist in their courses
+- **Enrolled users** can access playlists from courses they're enrolled in
+- Returns 403 if user is not enrolled and not the course owner
+
+**Error Responses:**
+
+| Status Code | Error Message |
+|-------------|---------------|
+| 401 | Not authorized to access this route |
+| 403 | You do not have permission to access this playlist |
+| 403 | You must be enrolled in this course to access playlists |
+| 404 | Playlist not found |
+| 404 | Course not found |
+| 500 | Error retrieving playlist |
 
 ---
 

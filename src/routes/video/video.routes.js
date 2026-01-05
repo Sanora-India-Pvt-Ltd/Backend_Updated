@@ -11,6 +11,7 @@ const {
 } = require('../../controllers/video/video.controller');
 const { protectUniversity } = require('../../middleware/universityAuth.middleware');
 const { protect } = require('../../middleware/auth');
+const { flexibleAuth } = require('../../middleware/flexibleAuth.middleware');
 
 // Configure multer for video uploads (500MB limit)
 const upload = multer({
@@ -38,8 +39,8 @@ const uploadThumbnail = multer({
 
 // Video Routes
 router.post('/', protectUniversity, upload.single('video'), uploadVideo);
-router.get('/playlists/:playlistId/videos', protect, getPlaylistVideos);
-router.get('/:id', protect, getVideo);
+router.get('/playlists/:playlistId/videos', flexibleAuth, getPlaylistVideos);
+router.get('/:id', flexibleAuth, getVideo);
 router.put('/:id', protectUniversity, updateVideo);
 router.delete('/:id', protectUniversity, deleteVideo);
 router.post('/:id/thumbnail', protectUniversity, (req, res, next) => {

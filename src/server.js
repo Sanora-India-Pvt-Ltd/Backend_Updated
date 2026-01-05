@@ -419,6 +419,26 @@ if (client && validClientIds.length > 0) {
     });
 }
 
+// ==================== EdTech Platform Routes (Register FIRST to avoid conflicts) ====================
+// Course routes - register early to avoid conflicts with general /api routes
+try {
+    console.log('🔄 Loading course routes...');
+    const courseRoutes = require('./routes/course/course.routes');
+    app.use('/api/courses', courseRoutes);
+    console.log('✅ Course routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading course routes:', error.message);
+    console.error('Stack:', error.stack);
+    // Don't crash - create a fallback route
+    app.use('/api/courses', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Course routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // Auth routes - wrapped in try-catch to ensure server starts even if routes fail to load
 try {
     console.log('🔄 Loading auth routes...');
@@ -862,16 +882,6 @@ try {
     console.error('Stack:', error.stack);
 }
 
-// Course routes
-try {
-    console.log('🔄 Loading course routes...');
-    app.use('/api/courses', require('./routes/course/course.routes'));
-    console.log('✅ Course routes loaded successfully');
-} catch (error) {
-    console.error('❌ Error loading course routes:', error.message);
-    console.error('Stack:', error.stack);
-}
-
 // Playlist routes
 try {
     console.log('🔄 Loading playlist routes...');
@@ -1297,6 +1307,8 @@ app.use((req, res) => {
         hint = 'Check the API documentation for the correct HTTP method and endpoint. Common endpoints: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/profile (requires auth)';
     } else if (req.path.startsWith('/api/chat/')) {
         hint = 'Chat routes require authentication. Make sure you include Authorization header: Authorization: Bearer <accessToken>. Available endpoints: GET /api/chat/conversations, GET /api/chat/conversation/:participantId (or /api/chat/conversations/:participantId), GET /api/chat/conversation/:conversationId/messages, POST /api/chat/message';
+    } else if (req.path.startsWith('/api/courses')) {
+        hint = 'Course routes require university authentication. Make sure you include Authorization header: Authorization: Bearer <universityToken>. Available endpoints: GET /api/courses (university auth), POST /api/courses (university auth), GET /api/courses/:id (user/university auth), PUT /api/courses/:id (university auth), DELETE /api/courses/:id (university auth). If you see this error, the route may not be registered - check server logs for "Loading course routes..."';
     }
     
     res.status(404).json({
