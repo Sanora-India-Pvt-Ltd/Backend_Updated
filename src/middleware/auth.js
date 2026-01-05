@@ -54,6 +54,7 @@ const protect = async (req, res, next) => {
             }
 
             req.user = user;
+            req.userId = user._id; // Also set userId for convenience
             next();
         } catch (error) {
             return res.status(401).json({

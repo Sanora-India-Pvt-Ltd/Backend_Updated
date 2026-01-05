@@ -850,6 +850,98 @@ try {
     });
 }
 
+// ==================== EdTech Platform Routes ====================
+
+// University Auth routes
+try {
+    console.log('🔄 Loading university auth routes...');
+    app.use('/api/auth/university', require('./routes/auth/university.routes'));
+    console.log('✅ University auth routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading university auth routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Course routes
+try {
+    console.log('🔄 Loading course routes...');
+    app.use('/api/courses', require('./routes/course/course.routes'));
+    console.log('✅ Course routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading course routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Playlist routes
+try {
+    console.log('🔄 Loading playlist routes...');
+    app.use('/api', require('./routes/course/playlist.routes'));
+    console.log('✅ Playlist routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading playlist routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Invite routes
+try {
+    console.log('🔄 Loading invite routes...');
+    app.use('/api/invites', require('./routes/course/invite.routes'));
+    console.log('✅ Invite routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading invite routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Video routes
+try {
+    console.log('🔄 Loading video routes...');
+    app.use('/api/videos', require('./routes/video/video.routes'));
+    console.log('✅ Video routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading video routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Checkpoint routes
+try {
+    console.log('🔄 Loading checkpoint routes...');
+    app.use('/api', require('./routes/video/checkpoint.routes'));
+    console.log('✅ Checkpoint routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading checkpoint routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Progress routes
+try {
+    console.log('🔄 Loading progress routes...');
+    app.use('/api/progress', require('./routes/progress/progress.routes'));
+    console.log('✅ Progress routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading progress routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Analytics routes
+try {
+    console.log('🔄 Loading analytics routes...');
+    app.use('/api/analytics', require('./routes/analytics/analytics.routes'));
+    console.log('✅ Analytics routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading analytics routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// Review routes
+try {
+    console.log('🔄 Loading review routes...');
+    app.use('/api/reviews', require('./routes/review/review.routes'));
+    console.log('✅ Review routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading review routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
 // Twilio OTP endpoints (phone verification)
 try {
     console.log('🔄 Loading Twilio OTP routes...');
@@ -1219,7 +1311,11 @@ app.use((req, res) => {
             getProfile: 'GET /api/auth/profile (requires Authorization: Bearer <token>)',
             refreshToken: 'POST /api/auth/refresh-token',
             sendOTPSignup: 'POST /api/auth/send-otp-signup',
-            verifyOTPSignup: 'POST /api/auth/verify-otp-signup'
+            verifyOTPSignup: 'POST /api/auth/verify-otp-signup',
+            universitySendOTP: 'POST /api/auth/university/send-otp',
+            universityVerifyOTP: 'POST /api/auth/university/verify-otp',
+            universityRegister: 'POST /api/auth/university/register',
+            universityLogin: 'POST /api/auth/university/login'
         } : undefined
     });
 });

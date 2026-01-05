@@ -18,6 +18,10 @@ const otpSchema = new mongoose.Schema({
             'user',
             'signup',
             'password_reset',
+            // University registration
+            'university_signup',
+            // University email verification (for existing accounts)
+            'university_verification',
             // Conference accounts (host/speaker) – kept separate from main user flow
             'conference_host_signup_email',
             'conference_host_signup_phone',
