@@ -12,6 +12,7 @@ const {
     votingService,
     audienceService,
     lockService,
+    pollStatsService,
     timerIntervals
 } = require('../services/conferencePollingService');
 
@@ -308,6 +309,20 @@ const initConferenceHandlers = (io) => {
                     // Initialize vote counts
                     await votingService.initializeVotes(questionId, question.options);
 
+                    // Initialize poll statistics (votes hash with all options set to 0)
+                    // This ensures all options are tracked even if no votes are cast
+                    const redis = require('../config/redisConnection').getRedis();
+                    if (redis) {
+                        const pollVotesKey = `conference:${conferenceId}:question:${questionId}:votes`;
+                        const initialVotes = {};
+                        question.options.forEach(opt => {
+                            initialVotes[opt.key.toUpperCase()] = '0';
+                        });
+                        await redis.hset(pollVotesKey, initialVotes);
+                        await redis.expire(pollVotesKey, 3600);
+                    }
+                    // In-memory fallback is handled automatically by pollStatsService.getVotes()
+
                     // Start timer countdown
                     startQuestionTimer(io, conferenceId, questionId, duration);
 
@@ -323,6 +338,9 @@ const initConferenceHandlers = (io) => {
                     };
 
                     io.to(`conference:${conferenceId}`).emit('question:live', liveQuestionData);
+
+                    // Emit initial poll stats to HOST/SPEAKER (with zero counts)
+                    await emitPollLiveStats(io, conferenceId, questionId);
 
                     console.log(`📊 Question ${questionId} pushed live in conference ${conferenceId} (${duration}s)`);
                 } finally {
@@ -372,6 +390,141 @@ const initConferenceHandlers = (io) => {
                 socket.emit('error', {
                     code: 'INTERNAL_ERROR',
                     message: 'Failed to close question',
+                    timestamp: Date.now()
+                });
+            }
+        });
+
+        /**
+         * Handle poll:join - Track participant joining a poll
+         */
+        socket.on('poll:join', async (data) => {
+            try {
+                const { conferenceId, questionId } = data;
+
+                if (!conferenceId || !questionId) {
+                    return socket.emit('error', {
+                        code: 'INVALID_REQUEST',
+                        message: 'Conference ID and Question ID are required',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Check if question is live
+                const liveQuestion = await questionService.getLive(conferenceId);
+                if (!liveQuestion || liveQuestion.questionId !== questionId) {
+                    return socket.emit('error', {
+                        code: 'QUESTION_NOT_LIVE',
+                        message: 'Question is not live',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Add participant (only if new)
+                const wasNew = await pollStatsService.addParticipant(conferenceId, questionId, userId);
+                
+                if (wasNew) {
+                    // Emit live stats to HOST/SPEAKER only
+                    await emitPollLiveStats(io, conferenceId, questionId);
+                }
+
+                console.log(`📊 User ${userId} joined poll for question ${questionId}`);
+            } catch (error) {
+                console.error('Poll join error:', error);
+                socket.emit('error', {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to join poll',
+                    timestamp: Date.now()
+                });
+            }
+        });
+
+        /**
+         * Handle poll:vote - Submit vote and update live statistics
+         */
+        socket.on('poll:vote', async (data) => {
+            try {
+                const { conferenceId, questionId, optionKey } = data;
+
+                if (!conferenceId || !questionId || !optionKey) {
+                    return socket.emit('error', {
+                        code: 'INVALID_REQUEST',
+                        message: 'Conference ID, Question ID, and optionKey are required',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Validate authority (AUDIENCE only, not HOST)
+                const hostId = await conferenceService.getHost(conferenceId);
+                if (userId === hostId) {
+                    return socket.emit('error', {
+                        code: 'UNAUTHORIZED',
+                        message: 'HOST cannot vote in polls',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Check if question is live
+                const liveQuestion = await questionService.getLive(conferenceId);
+                if (!liveQuestion || liveQuestion.questionId !== questionId) {
+                    return socket.emit('error', {
+                        code: 'QUESTION_NOT_LIVE',
+                        message: 'Question is not live',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Get question metadata to validate option
+                const meta = await questionService.getQuestionMeta(questionId);
+                if (!meta) {
+                    return socket.emit('error', {
+                        code: 'QUESTION_NOT_FOUND',
+                        message: 'Question metadata not found',
+                        timestamp: Date.now()
+                    });
+                }
+
+                const optionKeyUpper = optionKey.toUpperCase();
+                const validOptions = meta.options.map(opt => opt.key.toUpperCase());
+                if (!validOptions.includes(optionKeyUpper)) {
+                    return socket.emit('error', {
+                        code: 'INVALID_OPTION',
+                        message: 'Invalid option key',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Track user vote (prevents double voting)
+                const wasNewVote = await pollStatsService.trackUserVote(conferenceId, questionId, userId, optionKeyUpper);
+                
+                if (!wasNewVote) {
+                    return socket.emit('error', {
+                        code: 'ALREADY_VOTED',
+                        message: 'You have already voted on this question',
+                        timestamp: Date.now()
+                    });
+                }
+
+                // Increment vote count atomically
+                await pollStatsService.incrementVote(conferenceId, questionId, optionKeyUpper);
+
+                // Emit vote confirmation to sender
+                socket.emit('poll:vote:accepted', {
+                    conferenceId,
+                    questionId,
+                    optionKey: optionKeyUpper,
+                    timestamp: Date.now()
+                });
+
+                // Emit live stats to HOST/SPEAKER only
+                await emitPollLiveStats(io, conferenceId, questionId);
+
+                console.log(`✅ Vote recorded: User ${userId} voted ${optionKeyUpper} on question ${questionId}`);
+            } catch (error) {
+                console.error('Poll vote error:', error);
+                socket.emit('error', {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Failed to submit vote',
                     timestamp: Date.now()
                 });
             }
@@ -606,6 +759,51 @@ const startQuestionTimer = (io, conferenceId, questionId, duration) => {
 };
 
 /**
+ * Emit poll live statistics to HOST/SPEAKER only
+ */
+const emitPollLiveStats = async (io, conferenceId, questionId) => {
+    try {
+        // Get question metadata
+        const meta = await questionService.getQuestionMeta(questionId);
+        if (!meta) {
+            return; // Question metadata not found
+        }
+
+        // Get participant count
+        const participants = await pollStatsService.getParticipantCount(conferenceId, questionId);
+
+        // Get vote counts
+        const votes = await pollStatsService.getVotes(conferenceId, questionId);
+
+        // Calculate total votes
+        const totalVotes = Object.values(votes).reduce((sum, count) => sum + count, 0);
+
+        // Build results with counts and percentages
+        const results = {};
+        meta.options.forEach(opt => {
+            const optionKey = opt.key.toUpperCase();
+            const count = votes[optionKey] || 0;
+            const percentage = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
+            results[optionKey] = {
+                count,
+                percentage
+            };
+        });
+
+        // Emit to HOST/SPEAKER room only
+        io.to(`host:${conferenceId}`).emit('poll:live-stats', {
+            questionId,
+            participants,
+            totalVotes,
+            results,
+            timestamp: Date.now()
+        });
+    } catch (error) {
+        console.error('Emit poll live stats error:', error);
+    }
+};
+
+/**
  * Close question and broadcast final results
  */
 const closeQuestion = async (io, conferenceId, questionId, reason) => {
@@ -616,18 +814,40 @@ const closeQuestion = async (io, conferenceId, questionId, reason) => {
             return; // Already closed
         }
 
-        // Get final vote counts
+        // Get final vote counts (use poll stats service for consistency)
+        const pollVotes = await pollStatsService.getVotes(conferenceId, questionId);
+        const participants = await pollStatsService.getParticipantCount(conferenceId, questionId);
         const voteCounts = await votingService.getVoteCounts(questionId);
         const correctCount = await votingService.getCorrectCount(questionId);
         const meta = await questionService.getQuestionMeta(questionId);
 
+        // Use poll votes if available, otherwise fall back to voting service
+        const finalVotes = Object.keys(pollVotes).length > 0 ? pollVotes : voteCounts.optionCounts;
+        const totalVotes = Object.values(finalVotes).reduce((sum, count) => sum + count, 0) || voteCounts.totalVotes;
+
         // Calculate percentages
         const percentageBreakdown = {};
-        if (voteCounts.totalVotes > 0) {
-            Object.keys(voteCounts.optionCounts).forEach(option => {
-                percentageBreakdown[option] = Math.round(
-                    (voteCounts.optionCounts[option] / voteCounts.totalVotes) * 100
-                );
+        const results = {};
+        if (totalVotes > 0) {
+            meta.options.forEach(opt => {
+                const optionKey = opt.key.toUpperCase();
+                const count = finalVotes[optionKey] || 0;
+                const percentage = Math.round((count / totalVotes) * 100);
+                percentageBreakdown[optionKey] = percentage;
+                results[optionKey] = {
+                    count,
+                    percentage
+                };
+            });
+        } else {
+            // Initialize with zeros if no votes
+            meta.options.forEach(opt => {
+                const optionKey = opt.key.toUpperCase();
+                percentageBreakdown[optionKey] = 0;
+                results[optionKey] = {
+                    count: 0,
+                    percentage: 0
+                };
             });
         }
 
@@ -657,10 +877,20 @@ const closeQuestion = async (io, conferenceId, questionId, reason) => {
         }
 
         // Save final results to MongoDB asynchronously (non-blocking)
-        saveFinalResultsToMongoDB(questionId, voteCounts, correctCount).catch(error => {
+        saveFinalResultsToMongoDB(questionId, {
+            participants,
+            totalVotes,
+            results,
+            counts: finalVotes,
+            percentages: percentageBreakdown,
+            closedAt: Date.now()
+        }).catch(error => {
             console.error(`Failed to save final results for question ${questionId}:`, error);
         });
 
+        // Cleanup poll data and vote data
+        await pollStatsService.cleanupPoll(conferenceId, questionId);
+        
         // Cleanup vote data after a delay (keep for 1 hour for recovery)
         setTimeout(async () => {
             await votingService.cleanupVotes(questionId);
@@ -675,10 +905,22 @@ const closeQuestion = async (io, conferenceId, questionId, reason) => {
 /**
  * Save final results to MongoDB (async, non-blocking)
  */
-const saveFinalResultsToMongoDB = async (questionId, voteCounts, correctCount) => {
+const saveFinalResultsToMongoDB = async (questionId, resultsData) => {
     try {
         const question = await ConferenceQuestion.findById(questionId);
         if (!question) return;
+
+        // Update question with final results
+        question.status = 'CLOSED';
+        question.results = {
+            participants: resultsData.participants || 0,
+            totalVotes: resultsData.totalVotes || 0,
+            counts: resultsData.counts || {},
+            percentages: resultsData.percentages || {},
+            results: resultsData.results || {},
+            closedAt: resultsData.closedAt || new Date()
+        };
+        await question.save();
 
         // Update or create analytics
         let analytics = await ConferenceQuestionAnalytics.findOne({ questionId });
@@ -687,14 +929,13 @@ const saveFinalResultsToMongoDB = async (questionId, voteCounts, correctCount) =
             analytics = await ConferenceQuestionAnalytics.create({
                 questionId,
                 conferenceId: question.conferenceId,
-                totalResponses: voteCounts.totalVotes,
-                optionCounts: new Map(Object.entries(voteCounts.optionCounts)),
-                correctCount
+                totalResponses: resultsData.totalVotes || 0,
+                optionCounts: new Map(Object.entries(resultsData.counts || {})),
+                correctCount: 0 // Can be calculated from answers if needed
             });
         } else {
-            analytics.totalResponses = voteCounts.totalVotes;
-            analytics.optionCounts = new Map(Object.entries(voteCounts.optionCounts));
-            analytics.correctCount = correctCount;
+            analytics.totalResponses = resultsData.totalVotes || 0;
+            analytics.optionCounts = new Map(Object.entries(resultsData.counts || {}));
             analytics.lastUpdated = new Date();
             await analytics.save();
         }

@@ -18,7 +18,10 @@ const inMemoryStorage = {
     correctCounts: new Map(), // questionId -> number
     audience: new Map(), // conferenceId -> Set of userIds
     conferenceHosts: new Map(), // conferenceId -> hostId
-    questionMeta: new Map() // questionId -> { conferenceId, questionText, options, correctOption }
+    questionMeta: new Map(), // questionId -> { conferenceId, questionText, options, correctOption }
+    pollParticipants: new Map(), // `${conferenceId}:${questionId}` -> Set of userIds
+    pollVotes: new Map(), // `${conferenceId}:${questionId}` -> { optionKey: count }
+    pollUserVotes: new Map() // `${conferenceId}:${questionId}` -> Map(userId -> optionKey)
 };
 
 // Timer intervals for countdown (in-memory fallback)
@@ -502,12 +505,195 @@ const lockService = {
     }
 };
 
+/**
+ * Poll Statistics Operations (Real-time poll tracking)
+ */
+const pollStatsService = {
+    /**
+     * Add participant to poll (track who joined the poll)
+     */
+    async addParticipant(conferenceId, questionId, userId) {
+        const redis = getRedisClient();
+        const key = `conference:${conferenceId}:question:${questionId}:participants`;
+        
+        if (redis) {
+            const wasNew = await redis.sadd(key, userId);
+            await redis.expire(key, 3600); // 1 hour TTL
+            return wasNew === 1; // Returns true if user was newly added
+        } else {
+            // In-memory fallback
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (!inMemoryStorage.pollParticipants) {
+                inMemoryStorage.pollParticipants = new Map();
+            }
+            if (!inMemoryStorage.pollParticipants.has(storageKey)) {
+                inMemoryStorage.pollParticipants.set(storageKey, new Set());
+            }
+            const participantSet = inMemoryStorage.pollParticipants.get(storageKey);
+            const wasNew = !participantSet.has(userId);
+            if (wasNew) {
+                participantSet.add(userId);
+            }
+            return wasNew;
+        }
+    },
+
+    /**
+     * Get participant count for a poll
+     */
+    async getParticipantCount(conferenceId, questionId) {
+        const redis = getRedisClient();
+        const key = `conference:${conferenceId}:question:${questionId}:participants`;
+        
+        if (redis) {
+            return await redis.scard(key);
+        } else {
+            // In-memory fallback
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (!inMemoryStorage.pollParticipants) {
+                return 0;
+            }
+            const participantSet = inMemoryStorage.pollParticipants.get(storageKey);
+            return participantSet ? participantSet.size : 0;
+        }
+    },
+
+    /**
+     * Increment vote count for an option (atomic operation)
+     */
+    async incrementVote(conferenceId, questionId, optionKey) {
+        const redis = getRedisClient();
+        const votesKey = `conference:${conferenceId}:question:${questionId}:votes`;
+        
+        if (redis) {
+            const newCount = await redis.hincrby(votesKey, optionKey, 1);
+            await redis.expire(votesKey, 3600); // 1 hour TTL
+            return newCount;
+        } else {
+            // In-memory fallback
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (!inMemoryStorage.pollVotes) {
+                inMemoryStorage.pollVotes = new Map();
+            }
+            if (!inMemoryStorage.pollVotes.has(storageKey)) {
+                inMemoryStorage.pollVotes.set(storageKey, {});
+            }
+            const votes = inMemoryStorage.pollVotes.get(storageKey);
+            votes[optionKey] = (votes[optionKey] || 0) + 1;
+            return votes[optionKey];
+        }
+    },
+
+    /**
+     * Get all vote counts for a poll
+     */
+    async getVotes(conferenceId, questionId) {
+        const redis = getRedisClient();
+        const votesKey = `conference:${conferenceId}:question:${questionId}:votes`;
+        
+        if (redis) {
+            const votes = await redis.hgetall(votesKey);
+            // Convert string values to numbers
+            const result = {};
+            for (const [key, value] of Object.entries(votes)) {
+                result[key] = parseInt(value || '0', 10);
+            }
+            return result;
+        } else {
+            // In-memory fallback
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (!inMemoryStorage.pollVotes) {
+                return {};
+            }
+            return inMemoryStorage.pollVotes.get(storageKey) || {};
+        }
+    },
+
+    /**
+     * Track user vote (prevent double voting)
+     */
+    async trackUserVote(conferenceId, questionId, userId, optionKey) {
+        const redis = getRedisClient();
+        const userVotesKey = `conference:${conferenceId}:question:${questionId}:userVotes`;
+        
+        if (redis) {
+            // Use HSETNX to atomically set if not exists
+            const wasNew = await redis.hsetnx(userVotesKey, userId, optionKey);
+            await redis.expire(userVotesKey, 3600); // 1 hour TTL
+            return wasNew === 1; // Returns true if vote was new
+        } else {
+            // In-memory fallback
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (!inMemoryStorage.pollUserVotes) {
+                inMemoryStorage.pollUserVotes = new Map();
+            }
+            if (!inMemoryStorage.pollUserVotes.has(storageKey)) {
+                inMemoryStorage.pollUserVotes.set(storageKey, new Map());
+            }
+            const userVotes = inMemoryStorage.pollUserVotes.get(storageKey);
+            const wasNew = !userVotes.has(userId);
+            if (wasNew) {
+                userVotes.set(userId, optionKey);
+            }
+            return wasNew;
+        }
+    },
+
+    /**
+     * Get user's vote for a poll
+     */
+    async getUserVote(conferenceId, questionId, userId) {
+        const redis = getRedisClient();
+        const userVotesKey = `conference:${conferenceId}:question:${questionId}:userVotes`;
+        
+        if (redis) {
+            return await redis.hget(userVotesKey, userId);
+        } else {
+            // In-memory fallback
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (!inMemoryStorage.pollUserVotes) {
+                return null;
+            }
+            const userVotes = inMemoryStorage.pollUserVotes.get(storageKey);
+            return userVotes ? userVotes.get(userId) || null : null;
+        }
+    },
+
+    /**
+     * Cleanup poll data when question closes
+     */
+    async cleanupPoll(conferenceId, questionId) {
+        const redis = getRedisClient();
+        
+        if (redis) {
+            await redis.del(
+                `conference:${conferenceId}:question:${questionId}:participants`,
+                `conference:${conferenceId}:question:${questionId}:votes`,
+                `conference:${conferenceId}:question:${questionId}:userVotes`
+            );
+        } else {
+            // In-memory cleanup
+            const storageKey = `${conferenceId}:${questionId}`;
+            if (inMemoryStorage.pollParticipants) {
+                inMemoryStorage.pollParticipants.delete(storageKey);
+            }
+            if (inMemoryStorage.pollVotes) {
+                inMemoryStorage.pollVotes.delete(storageKey);
+            }
+            if (inMemoryStorage.pollUserVotes) {
+                inMemoryStorage.pollUserVotes.delete(storageKey);
+            }
+        }
+    }
+};
+
 module.exports = {
     conferenceService,
     questionService,
     votingService,
     audienceService,
     lockService,
+    pollStatsService,
     timerIntervals // Expose for timer management
 };
 

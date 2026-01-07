@@ -84,7 +84,39 @@ const conferenceQuestionSchema = new mongoose.Schema({
         enum: ['User', 'Speaker'],
         required: true
     },
-    answers: [answerSchema]
+    answers: [answerSchema],
+    results: {
+        participants: {
+            type: Number,
+            default: 0
+        },
+        totalVotes: {
+            type: Number,
+            default: 0
+        },
+        counts: {
+            type: Map,
+            of: Number,
+            default: {}
+        },
+        percentages: {
+            type: Map,
+            of: Number,
+            default: {}
+        },
+        results: {
+            type: Map,
+            of: {
+                count: Number,
+                percentage: Number
+            },
+            default: {}
+        },
+        closedAt: {
+            type: Date,
+            default: null
+        }
+    }
 }, {
     timestamps: true
 });
