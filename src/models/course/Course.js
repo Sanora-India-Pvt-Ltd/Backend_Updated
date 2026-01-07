@@ -23,6 +23,32 @@ const courseSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isInviteOnly: {
+        type: Boolean,
+        default: false
+    },
+    maxCompletions: {
+        type: Number,
+        default: null
+    },
+    completedCount: {
+        type: Number,
+        default: 0
+    },
+    completionDeadline: {
+        type: Date,
+        default: null
+    },
+    status: {
+        type: String,
+        enum: ['DRAFT', 'LIVE', 'FULL', 'COMPLETED'],
+        default: 'DRAFT'
+    },
+    rewardTokensPerCompletion: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
     stats: {
         totalUsers: {
             type: Number,
@@ -40,6 +66,8 @@ const courseSchema = new mongoose.Schema({
 // Indexes for performance
 courseSchema.index({ universityId: 1 });
 courseSchema.index({ inviteOnly: 1 });
+courseSchema.index({ isInviteOnly: 1 });
+courseSchema.index({ status: 1 });
 courseSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('Course', courseSchema);

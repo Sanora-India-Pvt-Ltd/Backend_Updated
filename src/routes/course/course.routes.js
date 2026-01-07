@@ -7,7 +7,11 @@ const {
     getCourseById,
     updateCourse,
     deleteCourse,
-    updateCourseThumbnail
+    updateCourseThumbnail,
+    requestEnrollment,
+    getCourseEnrollments,
+    approveEnrollment,
+    rejectEnrollment
 } = require('../../controllers/course/course.controller');
 const { protectUniversity } = require('../../middleware/universityAuth.middleware');
 const { protect } = require('../../middleware/auth');
@@ -75,6 +79,12 @@ router.post('/:id/thumbnail', protectUniversity, (req, res, next) => {
         next();
     });
 }, updateCourseThumbnail);
+
+// Enrollment routes
+router.post('/:courseId/enroll-request', protect, requestEnrollment);
+router.get('/:courseId/enrollments', protectUniversity, getCourseEnrollments);
+router.post('/:courseId/enrollments/:enrollmentId/approve', protectUniversity, approveEnrollment);
+router.post('/:courseId/enrollments/:enrollmentId/reject', protectUniversity, rejectEnrollment);
 
 module.exports = router;
 

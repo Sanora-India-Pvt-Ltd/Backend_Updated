@@ -44,6 +44,28 @@ const videoSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    attachedProductId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Product',
+        default: null
+    },
+    productAnalytics: {
+        views: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+        clicks: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+        purchases: {
+            type: Number,
+            default: 0,
+            min: 0
+        }
+    },
     createdAt: {
         type: Date,
         default: Date.now
@@ -56,6 +78,7 @@ const videoSchema = new mongoose.Schema({
 videoSchema.index({ playlistId: 1, order: 1 });
 videoSchema.index({ courseId: 1 });
 videoSchema.index({ playlistId: 1 });
+videoSchema.index({ attachedProductId: 1 });
 
 module.exports = mongoose.model('Video', videoSchema);
 

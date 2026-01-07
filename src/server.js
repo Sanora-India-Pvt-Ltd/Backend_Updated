@@ -870,6 +870,23 @@ try {
     });
 }
 
+// Wallet routes (read-only)
+try {
+    console.log('🔄 Loading wallet routes...');
+    app.use('/api/wallet', require('./routes/wallet/walletRoutes'));
+    console.log('✅ Wallet routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading wallet routes:', error.message);
+    console.error('Stack:', error.stack);
+    app.use('/api/wallet', (req, res) => {
+        res.status(500).json({
+            success: false,
+            message: 'Wallet routes failed to load. Check server logs.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    });
+}
+
 // ==================== EdTech Platform Routes ====================
 
 // University Auth routes
@@ -879,6 +896,16 @@ try {
     console.log('✅ University auth routes loaded successfully');
 } catch (error) {
     console.error('❌ Error loading university auth routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// University Course Analytics routes
+try {
+    console.log('🔄 Loading university course routes...');
+    app.use('/api/university', require('./routes/university/universityCourseRoutes'));
+    console.log('✅ University course routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading university course routes:', error.message);
     console.error('Stack:', error.stack);
 }
 

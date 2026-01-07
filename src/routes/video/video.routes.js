@@ -7,7 +7,9 @@ const {
     getPlaylistVideos,
     updateVideo,
     deleteVideo,
-    updateVideoThumbnail
+    updateVideoThumbnail,
+    trackProductView,
+    trackProductClick
 } = require('../../controllers/video/video.controller');
 const { protectUniversity } = require('../../middleware/universityAuth.middleware');
 const { protect } = require('../../middleware/auth');
@@ -27,6 +29,10 @@ router.get('/:id', protect, getVideo);
 router.put('/:id', protectUniversity, updateVideo);
 router.delete('/:id', protectUniversity, deleteVideo);
 router.post('/:id/thumbnail', protectUniversity, upload.single('thumbnail'), updateVideoThumbnail);
+
+// Product analytics routes (non-blocking)
+router.post('/:videoId/product-view', protect, trackProductView);
+router.post('/:videoId/product-click', protect, trackProductClick);
 
 module.exports = router;
 

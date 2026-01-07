@@ -322,12 +322,96 @@ const updateVideoThumbnail = async (req, res) => {
     }
 };
 
+/**
+ * Track product view (non-blocking)
+ * POST /api/videos/:videoId/product-view
+ */
+const trackProductView = async (req, res) => {
+    try {
+        const { videoId } = req.params;
+        const userId = req.userId; // From protect middleware
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
+        // Fire-and-forget: Don't wait for analytics update
+        Video.findByIdAndUpdate(
+            videoId,
+            { $inc: { 'productAnalytics.views': 1 } },
+            { new: false }
+        ).catch(err => {
+            console.error('Error tracking product view:', err);
+            // Silently fail - analytics shouldn't break the flow
+        });
+
+        // Return immediately
+        res.status(200).json({
+            success: true,
+            message: 'Product view tracked'
+        });
+    } catch (error) {
+        console.error('Track product view error:', error);
+        // Even on error, return success to not break user flow
+        res.status(200).json({
+            success: true,
+            message: 'Product view tracked'
+        });
+    }
+};
+
+/**
+ * Track product click (non-blocking)
+ * POST /api/videos/:videoId/product-click
+ */
+const trackProductClick = async (req, res) => {
+    try {
+        const { videoId } = req.params;
+        const userId = req.userId; // From protect middleware
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
+        // Fire-and-forget: Don't wait for analytics update
+        Video.findByIdAndUpdate(
+            videoId,
+            { $inc: { 'productAnalytics.clicks': 1 } },
+            { new: false }
+        ).catch(err => {
+            console.error('Error tracking product click:', err);
+            // Silently fail - analytics shouldn't break the flow
+        });
+
+        // Return immediately
+        res.status(200).json({
+            success: true,
+            message: 'Product click tracked'
+        });
+    } catch (error) {
+        console.error('Track product click error:', error);
+        // Even on error, return success to not break user flow
+        res.status(200).json({
+            success: true,
+            message: 'Product click tracked'
+        });
+    }
+};
+
 module.exports = {
     uploadVideo: uploadVideoController,
     getVideo,
     getPlaylistVideos,
     updateVideo,
     deleteVideo: deleteVideoController,
-    updateVideoThumbnail
+    updateVideoThumbnail,
+    trackProductView,
+    trackProductClick
 };
 
