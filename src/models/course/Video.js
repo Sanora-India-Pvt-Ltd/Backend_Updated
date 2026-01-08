@@ -4,7 +4,8 @@ const videoSchema = new mongoose.Schema({
     playlistId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Playlist',
-        required: true
+        required: false, // Optional for direct course uploads
+        default: null
     },
     courseId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -26,7 +27,13 @@ const videoSchema = new mongoose.Schema({
     },
     videoUrl: {
         type: String,
-        required: true
+        required: false, // Not required during upload, set after transcoding
+        default: null
+    },
+    status: {
+        type: String,
+        enum: ['UPLOADING', 'READY', 'FAILED'],
+        default: 'UPLOADING'
     },
     thumbnail: {
         type: String,

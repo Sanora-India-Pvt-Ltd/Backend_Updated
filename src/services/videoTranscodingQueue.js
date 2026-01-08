@@ -23,12 +23,15 @@ class VideoTranscodingQueue extends EventEmitter {
      * @param {Object} jobData - Job data
      * @param {string} jobData.inputPath - Path to input video file
      * @param {string} jobData.userId - User ID who uploaded the video
-     * @param {string} jobData.jobType - Type of job (post, reel, story, media)
+     * @param {string} jobData.jobType - Type of job (post, reel, story, media, course)
      * @param {string} jobData.originalFilename - Original filename
+     * @param {string} jobData.videoId - Video ID (for course videos)
+     * @param {string} jobData.courseId - Course ID (for course videos)
+     * @param {string} jobData.createdBy - Creator ID (for course videos)
      * @returns {Promise<string>} - Job ID
      */
     async addJob(jobData) {
-        const { inputPath, userId, jobType, originalFilename } = jobData;
+        const { inputPath, userId, jobType, originalFilename, videoId, courseId, createdBy } = jobData;
 
         // Create job record in database
         const job = await VideoTranscodingJob.create({
@@ -37,7 +40,10 @@ class VideoTranscodingQueue extends EventEmitter {
             jobType,
             originalFilename,
             status: 'queued',
-            progress: 0
+            progress: 0,
+            videoId: videoId || null,
+            courseId: courseId || null,
+            createdBy: createdBy || null
         });
 
         // Add to queue
@@ -47,6 +53,9 @@ class VideoTranscodingQueue extends EventEmitter {
             userId,
             jobType,
             originalFilename,
+            videoId: videoId || null,
+            courseId: courseId || null,
+            createdBy: createdBy || null,
             createdAt: new Date()
         });
 

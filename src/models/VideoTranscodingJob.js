@@ -17,8 +17,25 @@ const videoTranscodingJobSchema = new mongoose.Schema({
     },
     jobType: {
         type: String,
-        enum: ['post', 'reel', 'story', 'media'],
+        enum: ['post', 'reel', 'story', 'media', 'course'],
         required: true,
+        index: true
+    },
+    videoId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Video',
+        default: null,
+        index: true
+    },
+    courseId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Course',
+        default: null,
+        index: true
+    },
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: null,
         index: true
     },
     originalFilename: {
@@ -84,6 +101,8 @@ const videoTranscodingJobSchema = new mongoose.Schema({
 videoTranscodingJobSchema.index({ userId: 1, status: 1, createdAt: -1 });
 videoTranscodingJobSchema.index({ status: 1, createdAt: -1 });
 videoTranscodingJobSchema.index({ createdAt: -1 });
+videoTranscodingJobSchema.index({ videoId: 1 });
+videoTranscodingJobSchema.index({ courseId: 1, status: 1 });
 
 // TTL index to auto-delete old completed/failed jobs after 7 days
 videoTranscodingJobSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });

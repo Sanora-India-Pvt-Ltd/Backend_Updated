@@ -12,6 +12,9 @@ const videoService = require('../../services/video/videoService');
  */
 const createCourse = async (req, res) => {
     try {
+        console.log('CONTENT-TYPE >>>', req.headers['content-type']);
+        console.log('REQ BODY >>>', req.body);
+
         const { name, description, thumbnail, inviteOnly } = req.body;
         const universityId = req.universityId; // From middleware
 

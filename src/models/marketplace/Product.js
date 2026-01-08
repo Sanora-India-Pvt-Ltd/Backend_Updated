@@ -28,6 +28,15 @@ const productSchema = new mongoose.Schema({
     isActive: {
         type: Boolean,
         default: true
+    },
+    createdById: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+    },
+    createdByType: {
+        type: String,
+        enum: ['USER', 'UNIVERSITY'],
+        required: true
     }
 }, {
     timestamps: true
@@ -35,6 +44,7 @@ const productSchema = new mongoose.Schema({
 
 productSchema.index({ sellerId: 1 });
 productSchema.index({ isActive: 1 });
+productSchema.index({ createdById: 1, createdByType: 1 });
 
 module.exports = mongoose.model('Product', productSchema);
 

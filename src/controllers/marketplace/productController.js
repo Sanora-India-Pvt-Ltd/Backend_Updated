@@ -3,7 +3,27 @@ const mongoose = require('mongoose');
 
 const createProduct = async (req, res) => {
     try {
-        const sellerId = req.user._id;
+        // STEP 2: Detect creator type
+        let createdById, createdByType, sellerId;
+
+        if (req.user && req.user._id) {
+            // Creator is USER
+            createdById = req.user._id;
+            createdByType = 'USER';
+            sellerId = req.user._id; // Keep sellerId for backward compatibility
+        } else if (req.universityId) {
+            // Creator is UNIVERSITY
+            createdById = req.universityId;
+            createdByType = 'UNIVERSITY';
+            sellerId = req.universityId; // Use universityId as sellerId
+        } else {
+            // No valid authentication
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
         const { title, description, price, images } = req.body;
 
         if (!title || !title.trim()) {
@@ -46,7 +66,9 @@ const createProduct = async (req, res) => {
             title: title.trim(),
             description: description ? description.trim() : undefined,
             price,
-            images: images && Array.isArray(images) ? images : []
+            images: images && Array.isArray(images) ? images : [],
+            createdById,
+            createdByType
         });
 
         return res.status(201).json({

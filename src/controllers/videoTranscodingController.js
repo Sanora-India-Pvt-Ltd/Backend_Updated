@@ -1,6 +1,8 @@
 const videoTranscodingQueue = require('../services/videoTranscodingQueue');
 const VideoTranscodingJob = require('../models/VideoTranscodingJob');
-const { protect } = require('../middleware/auth');
+const Video = require('../models/course/Video');
+// const { protect } = require('../middleware/auth');
+const { isVideo } = require('../services/videoTranscoder');
 
 /**
  * Get transcoding job status
@@ -134,9 +136,112 @@ const getQueueStats = async (req, res) => {
     }
 };
 
+/**
+ * Upload video for course transcoding
+ * POST /api/video-transcoding/upload
+ */
+const uploadVideo = async (req, res) => {
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'Video file is required'
+            });
+        }
+
+        // Validate that the file is a video
+        if (!isVideo(req.file.mimetype)) {
+            return res.status(400).json({
+                success: false,
+                message: 'File must be a video'
+            });
+        }
+
+        // Get courseId from body (required)
+        const { courseId, title, attachedProductId } = req.body;
+
+        if (!courseId) {
+            return res.status(400).json({
+                success: false,
+                message: 'courseId is required'
+            });
+        }
+
+        if (!title || !title.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: 'title is required'
+            });
+        }
+
+        // Get creator ID (supports both USER and UNIVERSITY)
+        let createdBy;
+        if (req.user && req.user._id) {
+            createdBy = req.user._id.toString();
+        } else if (req.universityId) {
+            createdBy = req.universityId.toString();
+        } else {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
+        // Create Video document BEFORE queueing transcoding
+        const video = await Video.create({
+            courseId,
+            title: title.trim(),
+            attachedProductId: attachedProductId || null,
+            productAnalytics: {
+                views: 0,
+                clicks: 0,
+                purchases: 0
+            },
+            status: 'UPLOADING',
+            videoUrl: null, // Will be set after transcoding
+            s3Key: null // Will be set after transcoding
+        });
+
+        // Create transcoding job with videoId, courseId, and createdBy
+        const jobId = await videoTranscodingQueue.addJob({
+            inputPath: req.file.path,
+            userId: createdBy, // Keep userId for backward compatibility
+            jobType: 'course',
+            originalFilename: req.file.originalname,
+            videoId: video._id.toString(),
+            courseId: courseId,
+            createdBy: createdBy
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Video uploaded and queued for transcoding',
+            data: {
+                videoId: video._id.toString(),
+                jobId: jobId,
+                courseId: courseId,
+                title: video.title,
+                status: video.status,
+                originalFilename: req.file.originalname,
+                fileSize: req.file.size,
+                mimetype: req.file.mimetype
+            }
+        });
+    } catch (error) {
+        console.error('Upload video error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload video',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+};
+
 module.exports = {
     getJobStatus,
     getMyJobs,
-    getQueueStats
+    getQueueStats,
+    uploadVideo
 };
 

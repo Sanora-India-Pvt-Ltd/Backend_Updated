@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect } = require('../../middleware/auth');
+const { flexibleAuth } = require('../../middleware/flexibleAuth.middleware');
 const sellerGuard = require('../../middleware/sellerGuard');
 const {
     createProduct,
@@ -9,7 +9,9 @@ const {
 
 const router = express.Router();
 
-router.post('/', protect, sellerGuard, createProduct);
+// Product creation route: accepts both USER and UNIVERSITY tokens
+// Middleware chain: flexibleAuth (handles both auth types) → sellerGuard (bypasses for universities) → createProduct
+router.post('/', flexibleAuth, sellerGuard, createProduct);
 router.get('/', listProducts);
 router.get('/:id', getProductById);
 
