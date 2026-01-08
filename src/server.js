@@ -118,8 +118,9 @@ app.use((req, res, next) => {
     next();
 });
 
-// JSON parser
+// JSON parser (must be before routes)
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // Error handler for JSON parsing errors
 app.use((err, req, res, next) => {
