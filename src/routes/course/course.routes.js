@@ -15,6 +15,7 @@ const {
 } = require('../../controllers/course/course.controller');
 const { protectUniversity } = require('../../middleware/universityAuth.middleware');
 const { protect } = require('../../middleware/auth');
+const { flexibleAuth } = require('../../middleware/flexibleAuth.middleware');
 
 // Configure multer for memory storage (for S3 upload)
 const upload = multer({
@@ -44,14 +45,14 @@ router.get('/test', (req, res) => {
 });
 
 router.post('/', protectUniversity, createCourse);
-router.get('/', getCourses); // Public - returns LIVE/FULL for users, all courses for universities
+router.get('/', flexibleAuth, getCourses); // Returns LIVE/FULL for users, all courses for universities
 router.get('/:id', protect, getCourseById); // Public or authenticated
 router.put('/:id', protectUniversity, updateCourse);
 router.delete('/:id', protectUniversity, deleteCourse);
 
 // Debug: Log registered routes
 console.log('📋 Course routes registered:');
-console.log('  GET    /api/courses (public - LIVE/FULL courses only)');
+console.log('  GET    /api/courses (flexibleAuth - LIVE/FULL for users, all for universities)');
 console.log('  POST   /api/courses (protected, university)');
 console.log('  GET    /api/courses/:id (protected)');
 console.log('  PUT    /api/courses/:id (protected, university)');
