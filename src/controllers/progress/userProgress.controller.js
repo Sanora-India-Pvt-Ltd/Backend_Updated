@@ -9,7 +9,8 @@ const progressUpdateCache = new Map();
  */
 const updateVideoProgress = async (req, res) => {
     try {
-        const { videoId } = req.params;
+        // Support videoId from either params (PUT /video/:videoId) or body (POST /video)
+        const videoId = req.params.videoId || req.body.videoId;
         const { lastWatchedSecond, completed } = req.body;
         const userId = req.userId; // From user auth middleware
 

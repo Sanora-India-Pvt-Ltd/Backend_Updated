@@ -14,6 +14,7 @@ const {
 const { protect } = require('../../middleware/auth');
 
 // Progress Routes
+router.post('/video', protect, updateVideoProgress);
 router.put('/video/:videoId', protect, updateVideoProgress);
 router.get('/video/:videoId', protect, getVideoProgress);
 router.get('/playlist/:playlistId', protect, getMultipleProgress);
