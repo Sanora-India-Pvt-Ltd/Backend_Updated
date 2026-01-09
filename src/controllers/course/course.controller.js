@@ -82,6 +82,7 @@ const getCourses = async (req, res) => {
 
 /**
  * Get single course details
+ * Returns videos if user has APPROVED/IN_PROGRESS/COMPLETED enrollment
  */
 const getCourseById = async (req, res) => {
     try {
@@ -117,10 +118,44 @@ const getCourseById = async (req, res) => {
             }
         }
 
+        // Check if user has enrollment with access to videos
+        let enrollment = null;
+        let videos = null;
+
+        if (req.user && req.user._id) {
+            // Query CourseEnrollment for this user and course
+            enrollment = await CourseEnrollment.findOne({
+                userId: req.user._id,
+                courseId: course._id
+            }).lean();
+
+            // If enrollment exists and status allows video access
+            if (enrollment && ['APPROVED', 'IN_PROGRESS', 'COMPLETED'].includes(enrollment.status)) {
+                // Fetch videos with status READY
+                videos = await Video.find({
+                    courseId: course._id,
+                    status: 'READY'
+                })
+                .select('_id title videoUrl status attachedProductId')
+                .lean();
+            }
+        }
+
+        // Build response
+        const responseData = {
+            course
+        };
+
+        // Include enrollment status and videos if user has access
+        if (enrollment && videos !== null) {
+            responseData.enrollmentStatus = enrollment.status;
+            responseData.videos = videos;
+        }
+
         res.status(200).json({
             success: true,
             message: 'Course retrieved successfully',
-            data: { course }
+            data: responseData
         });
     } catch (error) {
         console.error('Get course error:', error);

@@ -16,6 +16,98 @@ const {
     timerIntervals
 } = require('../services/conferencePollingService');
 
+const currentSlideStorage = new Map(); // conferenceId -> slideIndex
+
+/**
+ * Push question live (internal reusable function)
+ */
+async function pushQuestionLiveInternal(io, conferenceId, questionId, duration) {
+    // Check conference status
+    const status = await conferenceService.getStatus(conferenceId);
+    if (status !== 'ACTIVE') {
+        throw new Error('Conference must be ACTIVE to push questions live');
+    }
+
+    // Acquire lock to prevent concurrent pushes
+    const lockKey = `conference:${conferenceId}:lock:push_question`;
+    const lockAcquired = await lockService.acquire(lockKey, 5);
+    if (!lockAcquired) {
+        throw new Error('Another operation is in progress');
+    }
+
+    try {
+        // Load question from MongoDB
+        const question = await ConferenceQuestion.findById(questionId);
+        if (!question || question.conferenceId.toString() !== conferenceId) {
+            throw new Error('Question not found');
+        }
+
+        // Close existing live question if any
+        const existingLive = await questionService.getLive(conferenceId);
+        if (existingLive) {
+            await questionService.closeLive(conferenceId);
+            io.to(`conference:${conferenceId}`).emit('question:closed', {
+                conferenceId,
+                questionId: existingLive.questionId,
+                reason: 'manual',
+                closedAt: Date.now()
+            });
+        }
+
+        // Cache question metadata
+        await questionService.cacheQuestionMeta(questionId, {
+            conferenceId: question.conferenceId.toString(),
+            questionText: question.questionText,
+            options: question.options,
+            correctOption: question.correctOption,
+            status: 'ACTIVE'
+        });
+
+        // Set question as live
+        await questionService.setLive(conferenceId, questionId, duration);
+
+        // Initialize vote counts
+        await votingService.initializeVotes(questionId, question.options);
+
+        // Initialize poll statistics (votes hash with all options set to 0)
+        // This ensures all options are tracked even if no votes are cast
+        const redis = require('../config/redisConnection').getRedis();
+        if (redis) {
+            const pollVotesKey = `conference:${conferenceId}:question:${questionId}:votes`;
+            const initialVotes = {};
+            question.options.forEach(opt => {
+                initialVotes[opt.key.toUpperCase()] = '0';
+            });
+            await redis.hset(pollVotesKey, initialVotes);
+            await redis.expire(pollVotesKey, 3600);
+        }
+        // In-memory fallback is handled automatically by pollStatsService.getVotes()
+
+        // Start timer countdown
+        startQuestionTimer(io, conferenceId, questionId, duration);
+
+        // Emit question live event
+        const liveQuestionData = {
+            conferenceId,
+            questionId,
+            questionText: question.questionText,
+            options: question.options,
+            duration,
+            startedAt: Date.now(),
+            expiresAt: Date.now() + (duration * 1000)
+        };
+
+        io.to(`conference:${conferenceId}`).emit('question:live', liveQuestionData);
+
+        // Emit initial poll stats to HOST/SPEAKER (with zero counts)
+        await emitPollLiveStats(io, conferenceId, questionId);
+
+        console.log(`📊 Question ${questionId} pushed live in conference ${conferenceId} (${duration}s)`);
+    } finally {
+        await lockService.release(lockKey);
+    }
+}
+
 /**
  * Initialize conference polling handlers
  * @param {Server} io - Socket.IO server instance
@@ -249,108 +341,26 @@ const initConferenceHandlers = (io) => {
                     });
                 }
 
-                // Check conference status
-                const status = await conferenceService.getStatus(conferenceId);
-                if (status !== 'ACTIVE') {
-                    return socket.emit('error', {
-                        code: 'CONFERENCE_NOT_ACTIVE',
-                        message: 'Conference must be ACTIVE to push questions live',
-                        timestamp: Date.now()
-                    });
-                }
-
-                // Acquire lock to prevent concurrent pushes
-                const lockKey = `conference:${conferenceId}:lock:push_question`;
-                const lockAcquired = await lockService.acquire(lockKey, 5);
-                if (!lockAcquired) {
-                    return socket.emit('error', {
-                        code: 'OPERATION_IN_PROGRESS',
-                        message: 'Another operation is in progress',
-                        timestamp: Date.now()
-                    });
-                }
-
-                try {
-                    // Load question from MongoDB
-                    const question = await ConferenceQuestion.findById(questionId);
-                    if (!question || question.conferenceId.toString() !== conferenceId) {
-                        await lockService.release(lockKey);
-                        return socket.emit('error', {
-                            code: 'QUESTION_NOT_FOUND',
-                            message: 'Question not found',
-                            timestamp: Date.now()
-                        });
-                    }
-
-                    // Close existing live question if any
-                    const existingLive = await questionService.getLive(conferenceId);
-                    if (existingLive) {
-                        await questionService.closeLive(conferenceId);
-                        io.to(`conference:${conferenceId}`).emit('question:closed', {
-                            conferenceId,
-                            questionId: existingLive.questionId,
-                            reason: 'manual',
-                            closedAt: Date.now()
-                        });
-                    }
-
-                    // Cache question metadata
-                    await questionService.cacheQuestionMeta(questionId, {
-                        conferenceId: question.conferenceId.toString(),
-                        questionText: question.questionText,
-                        options: question.options,
-                        correctOption: question.correctOption,
-                        status: 'ACTIVE'
-                    });
-
-                    // Set question as live
-                    await questionService.setLive(conferenceId, questionId, duration);
-
-                    // Initialize vote counts
-                    await votingService.initializeVotes(questionId, question.options);
-
-                    // Initialize poll statistics (votes hash with all options set to 0)
-                    // This ensures all options are tracked even if no votes are cast
-                    const redis = require('../config/redisConnection').getRedis();
-                    if (redis) {
-                        const pollVotesKey = `conference:${conferenceId}:question:${questionId}:votes`;
-                        const initialVotes = {};
-                        question.options.forEach(opt => {
-                            initialVotes[opt.key.toUpperCase()] = '0';
-                        });
-                        await redis.hset(pollVotesKey, initialVotes);
-                        await redis.expire(pollVotesKey, 3600);
-                    }
-                    // In-memory fallback is handled automatically by pollStatsService.getVotes()
-
-                    // Start timer countdown
-                    startQuestionTimer(io, conferenceId, questionId, duration);
-
-                    // Emit question live event
-                    const liveQuestionData = {
-                        conferenceId,
-                        questionId,
-                        questionText: question.questionText,
-                        options: question.options,
-                        duration,
-                        startedAt: Date.now(),
-                        expiresAt: Date.now() + (duration * 1000)
-                    };
-
-                    io.to(`conference:${conferenceId}`).emit('question:live', liveQuestionData);
-
-                    // Emit initial poll stats to HOST/SPEAKER (with zero counts)
-                    await emitPollLiveStats(io, conferenceId, questionId);
-
-                    console.log(`📊 Question ${questionId} pushed live in conference ${conferenceId} (${duration}s)`);
-                } finally {
-                    await lockService.release(lockKey);
-                }
+                await pushQuestionLiveInternal(io, conferenceId, questionId, duration);
             } catch (error) {
                 console.error('Push question live error:', error);
+                let errorCode = 'INTERNAL_ERROR';
+                let errorMessage = 'Failed to push question live';
+
+                if (error.message === 'Conference must be ACTIVE to push questions live') {
+                    errorCode = 'CONFERENCE_NOT_ACTIVE';
+                    errorMessage = error.message;
+                } else if (error.message === 'Another operation is in progress') {
+                    errorCode = 'OPERATION_IN_PROGRESS';
+                    errorMessage = error.message;
+                } else if (error.message === 'Question not found') {
+                    errorCode = 'QUESTION_NOT_FOUND';
+                    errorMessage = error.message;
+                }
+
                 socket.emit('error', {
-                    code: 'INTERNAL_ERROR',
-                    message: 'Failed to push question live',
+                    code: errorCode,
+                    message: errorMessage,
                     timestamp: Date.now()
                 });
             }
@@ -664,6 +674,91 @@ const initConferenceHandlers = (io) => {
                     conferenceId: data?.conferenceId,
                     questionId: data?.questionId,
                     reason: 'internal_error',
+                    timestamp: Date.now()
+                });
+            }
+        });
+
+        socket.on('presentation:slide_change', async (data) => {
+            try {
+                const { conferenceId, slideIndex } = data;
+
+                if (!conferenceId || typeof slideIndex !== 'number') {
+                    return socket.emit('error', {
+                        code: 'INVALID_REQUEST',
+                        message: 'Conference ID and slideIndex are required',
+                        timestamp: Date.now()
+                    });
+                }
+
+                const conference = await Conference.findById(conferenceId);
+                if (!conference) {
+                    return socket.emit('error', {
+                        code: 'CONFERENCE_NOT_FOUND',
+                        message: 'Conference not found',
+                        timestamp: Date.now()
+                    });
+                }
+
+                const hostId = await conferenceService.getHost(conferenceId);
+                if (!hostId || String(userId) !== String(hostId)) {
+                    return socket.emit('error', {
+                        code: 'UNAUTHORIZED',
+                        message: 'Only HOST can change slides',
+                        timestamp: Date.now()
+                    });
+                }
+
+                const redis = require('../config/redisConnection').getRedis();
+                const lockKey = `conference:${conferenceId}:lock:slide_change`;
+
+                if (redis) {
+                    const ok = await redis.set(lockKey, Date.now().toString(), 'PX', 500, 'NX');
+                    if (ok !== 'OK') return;
+                }
+
+                try {
+                    // STEP 3: close any live question
+                    const liveQuestion = await questionService.getLive(conferenceId);
+                    if (liveQuestion) {
+                        await closeQuestion(io, conferenceId, liveQuestion.questionId, 'slide_change');
+                    }
+
+                    // STEP 4: auto-push question mapped to this slide
+                    const question = await ConferenceQuestion.findOne({
+                        conferenceId,
+                        slideIndex
+                    });
+
+                    if (question) {
+                        await pushQuestionLiveInternal(
+                            io,
+                            conferenceId,
+                            question._id.toString(),
+                            45
+                        );
+                    }
+
+                    if (redis) {
+                        await redis.set(`conference:${conferenceId}:current_slide`, slideIndex);
+                    } else {
+                        currentSlideStorage.set(conferenceId, slideIndex);
+                    }
+
+                    io.to(`conference:${conferenceId}`).emit('presentation:slide_update', {
+                        conferenceId,
+                        slideIndex,
+                        timestamp: Date.now()
+                    });
+                } finally {
+                    if (redis) {
+                        await redis.del(lockKey);
+                    }
+                }
+            } catch (err) {
+                socket.emit('error', {
+                    code: 'INTERNAL_ERROR',
+                    message: 'Slide change failed',
                     timestamp: Date.now()
                 });
             }

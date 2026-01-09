@@ -8,6 +8,8 @@
 const EventEmitter = require('events');
 const { transcodeVideo, isVideo, cleanupFile } = require('./videoTranscoder');
 const VideoTranscodingJob = require('../models/VideoTranscodingJob');
+const Video = require('../models/course/Video');
+const StorageService = require('./storage.service');
 
 class VideoTranscodingQueue extends EventEmitter {
     constructor() {
@@ -114,7 +116,7 @@ class VideoTranscodingQueue extends EventEmitter {
      */
     async processJob(job) {
         this.activeJobs++;
-        const { jobId, inputPath, userId, jobType, originalFilename } = job;
+        const { jobId, inputPath, userId, jobType, originalFilename, videoId, courseId } = job;
 
         try {
             // Update job status to processing
@@ -168,6 +170,48 @@ class VideoTranscodingQueue extends EventEmitter {
             });
 
             console.log(`[VideoQueue] Job ${jobId} completed successfully`);
+
+            // Update Video document if this is a course video
+            if (jobType === 'course' && videoId) {
+                try {
+                    // Upload transcoded video to S3
+                    const s3Key = `videos/${courseId || 'course'}/${videoId}-${Date.now()}.mp4`;
+                    const uploadResult = await StorageService.uploadFromPath(result.outputPath, s3Key);
+
+                    // Update Video document
+                    await Video.updateOne(
+                        { _id: videoId },
+                        {
+                            status: 'READY',
+                            videoUrl: uploadResult.url,
+                            s3Key: uploadResult.key,
+                            duration: result.duration
+                        }
+                    );
+
+                    console.log(`[VideoQueue] Video ${videoId} updated to READY status`);
+
+                    // Cleanup transcoded file after upload
+                    try {
+                        await cleanupFile(result.outputPath);
+                    } catch (cleanupError) {
+                        console.warn(`[VideoQueue] Failed to cleanup file ${result.outputPath}:`, cleanupError);
+                    }
+                } catch (videoUpdateError) {
+                    // Log error but don't crash the worker
+                    console.error(`[VideoQueue] Failed to update Video ${videoId} after transcoding:`, videoUpdateError);
+                    // Optionally update Video status to FAILED
+                    try {
+                        await Video.updateOne(
+                            { _id: videoId },
+                            { status: 'FAILED' }
+                        );
+                    } catch (statusUpdateError) {
+                        console.error(`[VideoQueue] Failed to update Video ${videoId} status to FAILED:`, statusUpdateError);
+                    }
+                }
+            }
+
             this.emit('job:completed', { jobId, result });
 
         } catch (error) {

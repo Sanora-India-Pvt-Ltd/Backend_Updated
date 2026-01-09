@@ -36,6 +36,9 @@ const conferenceQuestionSchema = new mongoose.Schema({
         required: true,
         min: 1
     },
+    slideIndex: {
+        type: Number
+    },
     isLive: {
         type: Boolean,
         default: false
@@ -127,6 +130,7 @@ conferenceQuestionSchema.index({ conferenceId: 1, order: 1 }); // Ordered fetch
 conferenceQuestionSchema.index({ conferenceId: 1, status: 1 });
 conferenceQuestionSchema.index({ 'answers.userId': 1 }); // For participant queries
 conferenceQuestionSchema.index({ createdByRole: 1, createdById: 1 }); // For ownership queries
+conferenceQuestionSchema.index({ slideIndex: 1 }); // For slide index queries
 
 // Compound index to ensure only one live question per conference (enforced at application level)
 conferenceQuestionSchema.index({ conferenceId: 1, isLive: 1 }, { 
