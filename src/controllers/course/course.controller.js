@@ -53,15 +53,28 @@ const createCourse = async (req, res) => {
 };
 
 /**
- * Get all courses (public endpoint - returns only LIVE/FULL courses)
- * Works for authenticated and unauthenticated users
+ * Get all courses
+ * - UNIVERSITY token: Returns ALL courses owned by that university (DRAFT, LIVE, FULL, COMPLETED)
+ * - USER token or no token: Returns ONLY public courses (LIVE, FULL)
  */
 const getCourses = async (req, res) => {
     try {
-        // Filter only LIVE and FULL courses (public visibility)
-        const courses = await Course.find({
-            status: { $in: ['LIVE', 'FULL'] }
-        })
+        let query = {};
+
+        // Detect token type: If req.universityId exists, this is a UNIVERSITY request
+        if (req.universityId) {
+            // UNIVERSITY: Return all courses owned by this university (any status)
+            query = {
+                universityId: req.universityId
+            };
+        } else {
+            // USER / Public: Return only LIVE and FULL courses
+            query = {
+                status: { $in: ['LIVE', 'FULL'] }
+            };
+        }
+
+        const courses = await Course.find(query)
             .sort({ createdAt: -1 })
             .lean();
 

@@ -44,7 +44,7 @@ router.get('/test', (req, res) => {
 });
 
 router.post('/', protectUniversity, createCourse);
-router.get('/', getCourses); // Public - returns only LIVE/FULL courses
+router.get('/', getCourses); // Public - returns LIVE/FULL for users, all courses for universities
 router.get('/:id', protect, getCourseById); // Public or authenticated
 router.put('/:id', protectUniversity, updateCourse);
 router.delete('/:id', protectUniversity, deleteCourse);
