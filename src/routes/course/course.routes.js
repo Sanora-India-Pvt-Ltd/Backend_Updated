@@ -46,7 +46,7 @@ router.get('/test', (req, res) => {
 
 router.post('/', protectUniversity, createCourse);
 router.get('/', flexibleAuth, getCourses); // Returns LIVE/FULL for users, all courses for universities
-router.get('/:id', protect, getCourseById); // Public or authenticated
+router.get('/:id', flexibleAuth, getCourseById); // Public or authenticated
 router.put('/:id', protectUniversity, updateCourse);
 router.delete('/:id', protectUniversity, deleteCourse);
 

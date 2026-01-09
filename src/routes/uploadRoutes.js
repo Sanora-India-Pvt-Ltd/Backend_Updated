@@ -1,6 +1,7 @@
 const express = require("express");
 const upload = require("../middleware/s3Upload");
 const { protect } = require("../middleware/auth");
+const { flexibleAuth } = require("../middleware/flexibleAuth.middleware");
 const { 
     uploadMedia, 
     uploadProfileImage,
@@ -16,7 +17,7 @@ const {
 const router = express.Router();
 
 // Upload route requires authentication
-router.post("/upload", protect, upload.single("media"), uploadMedia);
+router.post("/upload", flexibleAuth, upload.single("media"), uploadMedia);
 
 // Profile image upload route - ensures image is only associated with the authenticated user
 router.post("/profile-image", protect, upload.single("profileImage"), uploadProfileImage);
