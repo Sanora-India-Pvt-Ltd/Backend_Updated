@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { getCourseAnalytics, publishCourse } = require('../../controllers/course/course.controller');
-const { protectUniversity } = require('../../middleware/universityAuth.middleware');
+const { flexibleAuth } = require('../../middleware/flexibleAuth.middleware');
+const { requireUniversity } = require('../../middleware/roleGuards');
 
-// University Course Analytics Routes
-router.get('/courses/:courseId/analytics', protectUniversity, getCourseAnalytics);
+// University Course Analytics Routes (UNIVERSITY only)
+router.get('/courses/:courseId/analytics', flexibleAuth, requireUniversity, getCourseAnalytics);
 
-// University Course Publishing Routes
-router.post('/courses/:courseId/publish', protectUniversity, publishCourse);
+// University Course Publishing Routes (UNIVERSITY only)
+router.post('/courses/:courseId/publish', flexibleAuth, requireUniversity, publishCourse);
 
 module.exports = router;
 

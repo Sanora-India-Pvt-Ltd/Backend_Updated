@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { getWallet, getTransactions } = require('../../controllers/wallet/walletController');
-const { protect } = require('../../middleware/auth');
+const { flexibleAuth } = require('../../middleware/flexibleAuth.middleware');
+const { requireUser } = require('../../middleware/roleGuards');
 
 /**
  * Wallet Routes (Read-Only)
@@ -10,11 +11,11 @@ const { protect } = require('../../middleware/auth');
  * Tokens are EARN-ONLY. Redemption is disabled.
  */
 
-// Get wallet balance
-router.get('/', protect, getWallet);
+// Get wallet balance (USER only)
+router.get('/', flexibleAuth, requireUser, getWallet);
 
-// Get transaction history (paginated)
-router.get('/transactions', protect, getTransactions);
+// Get transaction history (paginated, USER only)
+router.get('/transactions', flexibleAuth, requireUser, getTransactions);
 
 module.exports = router;
 
