@@ -1161,64 +1161,91 @@ const removeAlternatePhone = async (req, res) => {
 // Upload media to S3 - ensures it's only associated with the authenticated user
 const uploadMedia = async (req, res) => {
     try {
-        if (!req.file) {
+        // Validate files exist
+        if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
             return res.status(400).json({
                 success: false,
-                message: "No file uploaded"
+                message: "No files uploaded"
             });
         }
 
-        const user = req.user; // From protect middleware - ensures only authenticated user can upload
-
-        // Check if uploaded file is a video
-        const isVideoFile = isVideo(req.file.mimetype);
-
-        // Handle file upload based on storage type
-        // diskUpload provides file.path, multer-s3 provides file.location and file.key
-        let uploadResult;
-        if (req.file.path) {
-            // File was saved to disk (diskStorage) - upload to S3
-            uploadResult = await StorageService.uploadFromPath(req.file.path);
-        } else if (req.file.location && req.file.key) {
-            // File was already uploaded via multer-s3
-            uploadResult = await StorageService.uploadFromRequest(req.file);
-        } else {
-            throw new Error('Invalid file object: missing path (diskStorage) or location/key (multer-s3)');
+        // Get user from flexibleAuth (supports both USER and UNIVERSITY tokens)
+        const user = req.user;
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: "Authentication required"
+            });
         }
 
-        // Determine media type from mimetype
-        const mediaType = isVideoFile ? 'video' : 'image';
-        const format = req.file.mimetype.split('/')[1] || 'unknown';
+        const uploadedFiles = [];
 
-        // Save upload record to database - associated with this specific user
-        const mediaRecord = await Media.create({
-            userId: user._id, // Ensures it's only associated with this user
-            url: uploadResult.url,
-            public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
-            format: format,
-            resource_type: mediaType,
-            fileSize: req.file.size,
-            originalFilename: req.file.originalname,
-            folder: 'user_uploads',
-            provider: uploadResult.provider
-        });
+        // Process each file
+        for (const file of req.files) {
+            // Validate mimetype (only image/* or video/*)
+            const isValidMimetype = file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/');
+            if (!isValidMimetype) {
+                continue; // Skip invalid files, continue with others
+            }
+
+            // Check if uploaded file is a video
+            const isVideoFile = isVideo(file.mimetype);
+
+            // Handle file upload based on storage type
+            // diskUpload provides file.path, multer-s3 provides file.location and file.key
+            let uploadResult;
+            if (file.path) {
+                // File was saved to disk (diskStorage) - upload to S3
+                uploadResult = await StorageService.uploadFromPath(file.path);
+            } else if (file.location && file.key) {
+                // File was already uploaded via multer-s3
+                uploadResult = await StorageService.uploadFromRequest(file);
+            } else {
+                console.warn('Invalid file object:', file);
+                continue; // Skip invalid files
+            }
+
+            // Determine media type from mimetype
+            const mediaType = isVideoFile ? 'video' : 'image';
+            const format = file.mimetype.split('/')[1] || 'unknown';
+
+            // Save upload record to database - associated with this specific user
+            const mediaRecord = await Media.create({
+                userId: user._id, // Ensures it's only associated with this user
+                url: uploadResult.url,
+                public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
+                format: format,
+                resource_type: mediaType,
+                fileSize: file.size,
+                originalFilename: file.originalname,
+                folder: 'user_uploads',
+                provider: uploadResult.provider
+            });
+
+            uploadedFiles.push({
+                url: uploadResult.url,
+                key: uploadResult.key,
+                mimetype: file.mimetype,
+                id: mediaRecord._id,
+                format: format,
+                type: mediaType,
+                fileSize: file.size
+            });
+        }
+
+        // If no valid files were processed
+        if (uploadedFiles.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No valid files uploaded. Only image/* and video/* files are allowed."
+            });
+        }
 
         return res.status(200).json({
             success: true,
-            message: "Uploaded successfully",
+            message: "Media uploaded successfully",
             data: {
-                id: mediaRecord._id,
-                url: uploadResult.url,
-                public_id: uploadResult.key, // Use key as public_id
-                format: format,
-                type: mediaType,
-                fileSize: req.file.size,
-                uploadedBy: {
-                    userId: user._id,
-                    email: user.profile?.email,
-                    name: user.profile?.name?.full
-                },
-                uploadedAt: mediaRecord.createdAt
+                files: uploadedFiles
             }
         });
 
