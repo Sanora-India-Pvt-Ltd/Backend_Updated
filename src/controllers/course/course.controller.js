@@ -135,7 +135,18 @@ const getCourseById = async (req, res) => {
         let enrollment = null;
         let videos = null;
 
-        if (req.user && req.user._id) {
+        // 1. If university owns the course, return all videos (bypass enrollment check)
+        if (req.universityId && course.universityId.toString() === req.universityId.toString()) {
+            // Fetch all videos with status READY for the owning university
+            videos = await Video.find({
+                courseId: course._id,
+                status: 'READY'
+            })
+            .select('_id title videoUrl status attachedProductId')
+            .lean();
+        }
+        // 2. If user exists, check enrollment-based access
+        else if (req.user && req.user._id) {
             // Query CourseEnrollment for this user and course
             enrollment = await CourseEnrollment.findOne({
                 userId: req.user._id,
@@ -162,6 +173,10 @@ const getCourseById = async (req, res) => {
         // Include enrollment status and videos if user has access
         if (enrollment && videos !== null) {
             responseData.enrollmentStatus = enrollment.status;
+            responseData.videos = videos;
+        }
+        // Include videos if university owns the course (even if empty array)
+        else if (videos !== null) {
             responseData.videos = videos;
         }
 
@@ -390,32 +405,18 @@ const requestEnrollment = async (req, res, next) => {
             });
         }
 
-        // Determine enrollment status based on course settings
-        const isInviteOnly = course.isInviteOnly !== undefined ? course.isInviteOnly : course.inviteOnly;
-        const enrollmentStatus = isInviteOnly ? 'REQUESTED' : 'APPROVED';
-
-        // Create enrollment
+        // Create enrollment - ALL enrollments require manual approval
         const enrollmentData = {
             userId,
             courseId,
-            status: enrollmentStatus
+            status: 'REQUESTED'
         };
-
-        // If auto-approved, set approvedAt and expiresAt
-        if (enrollmentStatus === 'APPROVED') {
-            enrollmentData.approvedAt = new Date();
-            if (course.completionDeadline) {
-                enrollmentData.expiresAt = course.completionDeadline;
-            }
-        }
 
         const enrollment = await CourseEnrollment.create(enrollmentData);
 
         res.status(201).json({
             success: true,
-            message: enrollmentStatus === 'APPROVED' 
-                ? 'Enrollment approved automatically' 
-                : 'Enrollment request submitted',
+            message: 'Enrollment request submitted',
             data: { enrollment }
         });
     } catch (error) {
