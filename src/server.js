@@ -904,6 +904,7 @@ try {
 try {
     console.log('🔄 Loading university course routes...');
     app.use('/api/university', require('./routes/university/universityCourseRoutes'));
+    app.use('/api/university', require('./routes/university/videoQuestion.routes'));
     console.log('✅ University course routes loaded successfully');
 } catch (error) {
     console.error('❌ Error loading university course routes:', error.message);
