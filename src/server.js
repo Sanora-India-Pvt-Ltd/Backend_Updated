@@ -1443,8 +1443,8 @@ const { initSocketServer } = require('./socket/socketServer');
     if (isRedisReady()) {
         console.log('✅ Redis enabled - conference polling can scale horizontally');
     } else {
-        console.log('ℹ️  Redis disabled - using in-memory cache and presence tracking');
-        console.log('   This is suitable for single-server deployments.');
+    console.log('ℹ️  Redis disabled - using in-memory cache and presence tracking');
+    console.log('   This is suitable for single-server deployments.');
         console.log('   Set REDIS_URL environment variable to enable horizontal scaling.');
     }
     console.log('📊 Conference polling: Real-time voting with Socket.IO');

@@ -6,9 +6,11 @@
  */
 
 const EventEmitter = require('events');
+const axios = require('axios');
 const { transcodeVideo, isVideo, cleanupFile } = require('./videoTranscoder');
 const VideoTranscodingJob = require('../models/VideoTranscodingJob');
 const Video = require('../models/course/Video');
+const VideoQuestion = require('../models/course/VideoQuestion');
 const StorageService = require('./storage.service');
 
 class VideoTranscodingQueue extends EventEmitter {
@@ -190,6 +192,82 @@ class VideoTranscodingQueue extends EventEmitter {
                     );
 
                     console.log(`[VideoQueue] Video ${videoId} updated to READY status`);
+
+                    // Auto-generate MCQs from video using AI API
+                    try {
+                        // Check if AI questions already exist for this video (idempotency)
+                        const existingQuestions = await VideoQuestion.countDocuments({
+                            videoId: videoId,
+                            source: 'AI'
+                        });
+
+                        if (existingQuestions === 0) {
+                            // Fetch the updated video to get videoUrl
+                            const video = await Video.findById(videoId);
+                            
+                            if (video && video.videoUrl) {
+                                console.log(`[VideoQueue] Generating MCQs for video ${videoId}...`);
+
+                                // Call external AI API
+                                const aiResponse = await axios.post(
+                                    'https://api.drishtifilmproductions.com/videos/mcqs',
+                                    {
+                                        video_url: video.videoUrl,
+                                        include_answers: true,
+                                        randomize: false,
+                                        limit: 5,
+                                        force: false
+                                    },
+                                    {
+                                        timeout: 30000 // 30 second timeout
+                                    }
+                                );
+
+                                // Parse response and create VideoQuestion documents
+                                if (aiResponse.data && Array.isArray(aiResponse.data.questions)) {
+                                    const questionsToCreate = aiResponse.data.questions.map(q => ({
+                                        courseId: courseId || video.courseId,
+                                        videoId: videoId,
+                                        question: q.question,
+                                        options: {
+                                            A: q.options?.A || '',
+                                            B: q.options?.B || '',
+                                            C: q.options?.C || '',
+                                            D: q.options?.D || ''
+                                        },
+                                        correctAnswer: q.correct_answer || 'A',
+                                        source: 'AI',
+                                        status: 'DRAFT',
+                                        editable: true,
+                                        aiMeta: {
+                                            chunk_num: q.chunk_num,
+                                            timestamp: q.timestamp,
+                                            timestamp_seconds: q.timestamp_seconds,
+                                            anchor_type: q.anchor_type,
+                                            batch_number: q.batch_number,
+                                            part_number: q.part_number
+                                        }
+                                    }));
+
+                                    // Create all questions
+                                    if (questionsToCreate.length > 0) {
+                                        await VideoQuestion.insertMany(questionsToCreate);
+                                        console.log(`[VideoQueue] Created ${questionsToCreate.length} MCQs for video ${videoId}`);
+                                    }
+                                } else {
+                                    console.warn(`[VideoQueue] AI API response missing questions array for video ${videoId}`);
+                                }
+                            } else {
+                                console.warn(`[VideoQueue] Video ${videoId} missing videoUrl, skipping MCQ generation`);
+                            }
+                        } else {
+                            console.log(`[VideoQueue] AI questions already exist for video ${videoId}, skipping generation`);
+                        }
+                    } catch (mcqError) {
+                        // Log error but don't fail transcoding
+                        console.error(`[VideoQueue] Failed to generate MCQs for video ${videoId}:`, mcqError.message);
+                        // Do NOT throw - transcoding should still be considered successful
+                    }
 
                     // Cleanup transcoded file after upload
                     try {

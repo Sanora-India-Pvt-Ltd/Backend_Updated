@@ -27,8 +27,8 @@ const createCourse = async (req, res) => {
 
         const course = await Course.create({
             universityId,
-            name,
-            description: description || '',
+                name,
+                description: description || '',
             thumbnail: thumbnail || null,
             inviteOnly: inviteOnly !== undefined ? inviteOnly : true,
             maxCompletions: req.body.maxCompletions ?? null,

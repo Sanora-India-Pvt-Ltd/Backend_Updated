@@ -533,8 +533,8 @@ const addQuestion = async (req, res) => {
                 createdById = req.hostUser._id;
                 createdByModel = 'Host';
             } else {
-                createdById = userId;
-                createdByModel = 'User';
+            createdById = userId;
+            createdByModel = 'User';
             }
         } else {
             // SPEAKER
@@ -545,15 +545,15 @@ const addQuestion = async (req, res) => {
                 createdByModel = 'Speaker';
             } else {
                 // Legacy: User authenticated as speaker, need to find speaker by email
-                const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
-                if (!speaker) {
-                    return res.status(404).json({
-                        success: false,
-                        message: 'Speaker profile not found'
-                    });
-                }
-                createdById = speaker._id;
-                createdByModel = 'Speaker';
+            const speaker = await Speaker.findOne({ 'account.email': req.user.profile?.email });
+            if (!speaker) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Speaker profile not found'
+                });
+            }
+            createdById = speaker._id;
+            createdByModel = 'Speaker';
             }
         }
 

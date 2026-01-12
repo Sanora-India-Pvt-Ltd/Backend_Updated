@@ -1188,39 +1188,39 @@ const uploadMedia = async (req, res) => {
                 continue; // Skip invalid files, continue with others
             }
 
-            // Check if uploaded file is a video
+        // Check if uploaded file is a video
             const isVideoFile = isVideo(file.mimetype);
 
-            // Handle file upload based on storage type
-            // diskUpload provides file.path, multer-s3 provides file.location and file.key
-            let uploadResult;
+        // Handle file upload based on storage type
+        // diskUpload provides file.path, multer-s3 provides file.location and file.key
+        let uploadResult;
             if (file.path) {
-                // File was saved to disk (diskStorage) - upload to S3
+            // File was saved to disk (diskStorage) - upload to S3
                 uploadResult = await StorageService.uploadFromPath(file.path);
             } else if (file.location && file.key) {
-                // File was already uploaded via multer-s3
+            // File was already uploaded via multer-s3
                 uploadResult = await StorageService.uploadFromRequest(file);
-            } else {
+        } else {
                 console.warn('Invalid file object:', file);
                 continue; // Skip invalid files
-            }
+        }
 
-            // Determine media type from mimetype
-            const mediaType = isVideoFile ? 'video' : 'image';
+        // Determine media type from mimetype
+        const mediaType = isVideoFile ? 'video' : 'image';
             const format = file.mimetype.split('/')[1] || 'unknown';
 
-            // Save upload record to database - associated with this specific user
-            const mediaRecord = await Media.create({
-                userId: user._id, // Ensures it's only associated with this user
-                url: uploadResult.url,
-                public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
-                format: format,
-                resource_type: mediaType,
+        // Save upload record to database - associated with this specific user
+        const mediaRecord = await Media.create({
+            userId: user._id, // Ensures it's only associated with this user
+            url: uploadResult.url,
+            public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
+            format: format,
+            resource_type: mediaType,
                 fileSize: file.size,
                 originalFilename: file.originalname,
-                folder: 'user_uploads',
-                provider: uploadResult.provider
-            });
+            folder: 'user_uploads',
+            provider: uploadResult.provider
+        });
 
             uploadedFiles.push({
                 url: uploadResult.url,

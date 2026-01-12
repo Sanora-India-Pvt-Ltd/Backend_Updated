@@ -77,11 +77,11 @@ const initSocketServer = async (httpServer) => {
                 } else {
                     // Default to User authentication
                     const user = await User.findById(decoded.id).select('-auth');
-                    if (!user) {
-                        return next(new Error('Authentication error: User not found'));
-                    }
-                    socket.userId = user._id.toString();
-                    socket.user = user;
+                if (!user) {
+                    return next(new Error('Authentication error: User not found'));
+                }
+                socket.userId = user._id.toString();
+                socket.user = user;
                     socket.userType = 'user';
                 }
 
