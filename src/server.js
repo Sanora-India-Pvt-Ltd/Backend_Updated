@@ -1405,6 +1405,9 @@ const { initRedis } = require('./config/redisConnection');
 // Initialize Socket.IO server (must be awaited to ensure Redis connections are ready)
 const { initSocketServer } = require('./socket/socketServer');
 
+// Initialize MCQ generation worker
+const { startMCQGenerationWorker } = require('./workers/mcqGenerationWorker');
+
 // Start server after Socket.IO is initialized
 (async () => {
     try {
@@ -1412,6 +1415,9 @@ const { initSocketServer } = require('./socket/socketServer');
         await initRedis();
         
         await initSocketServer(httpServer);
+        
+        // Start MCQ generation worker (after database connection)
+        startMCQGenerationWorker();
         
         // Start server
         httpServer.listen(PORT, () => {

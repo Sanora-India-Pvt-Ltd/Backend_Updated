@@ -6,11 +6,10 @@
  */
 
 const EventEmitter = require('events');
-const axios = require('axios');
 const { transcodeVideo, isVideo, cleanupFile } = require('./videoTranscoder');
 const VideoTranscodingJob = require('../models/VideoTranscodingJob');
 const Video = require('../models/course/Video');
-const VideoQuestion = require('../models/course/VideoQuestion');
+const MCQGenerationJob = require('../models/course/MCQGenerationJob');
 const StorageService = require('./storage.service');
 
 class VideoTranscodingQueue extends EventEmitter {
@@ -193,79 +192,36 @@ class VideoTranscodingQueue extends EventEmitter {
 
                     console.log(`[VideoQueue] Video ${videoId} updated to READY status`);
 
-                    // Auto-generate MCQs from video using AI API
+                    // Queue MCQ generation job (asynchronous, non-blocking)
                     try {
-                        // Check if AI questions already exist for this video (idempotency)
-                        const existingQuestions = await VideoQuestion.countDocuments({
-                            videoId: videoId,
-                            source: 'AI'
-                        });
+                        // Fetch the updated video to get courseId
+                        const video = await Video.findById(videoId);
+                        
+                        if (video && video.videoUrl) {
+                            // Check if MCQ generation job already exists for this video
+                            const existingJob = await MCQGenerationJob.findOne({
+                                videoId: videoId,
+                                status: { $in: ['PENDING', 'PROCESSING'] }
+                            });
 
-                        if (existingQuestions === 0) {
-                            // Fetch the updated video to get videoUrl
-                            const video = await Video.findById(videoId);
-                            
-                            if (video && video.videoUrl) {
-                                console.log(`[VideoQueue] Generating MCQs for video ${videoId}...`);
-
-                                // Call external AI API
-                                const aiResponse = await axios.post(
-                                    'https://api.drishtifilmproductions.com/videos/mcqs',
-                                    {
-                                        video_url: video.videoUrl,
-                                        include_answers: true,
-                                        randomize: false,
-                                        limit: 5,
-                                        force: false
-                                    },
-                                    {
-                                        timeout: 30000 // 30 second timeout
-                                    }
-                                );
-
-                                // Parse response and create VideoQuestion documents
-                                if (aiResponse.data && Array.isArray(aiResponse.data.questions)) {
-                                    const questionsToCreate = aiResponse.data.questions.map(q => ({
-                                        courseId: courseId || video.courseId,
-                                        videoId: videoId,
-                                        question: q.question,
-                                        options: {
-                                            A: q.options?.A || '',
-                                            B: q.options?.B || '',
-                                            C: q.options?.C || '',
-                                            D: q.options?.D || ''
-                                        },
-                                        correctAnswer: q.correct_answer || 'A',
-                                        source: 'AI',
-                                        status: 'DRAFT',
-                                        editable: true,
-                                        aiMeta: {
-                                            chunk_num: q.chunk_num,
-                                            timestamp: q.timestamp,
-                                            timestamp_seconds: q.timestamp_seconds,
-                                            anchor_type: q.anchor_type,
-                                            batch_number: q.batch_number,
-                                            part_number: q.part_number
-                                        }
-                                    }));
-
-                                    // Create all questions
-                                    if (questionsToCreate.length > 0) {
-                                        await VideoQuestion.insertMany(questionsToCreate);
-                                        console.log(`[VideoQueue] Created ${questionsToCreate.length} MCQs for video ${videoId}`);
-                                    }
-                                } else {
-                                    console.warn(`[VideoQueue] AI API response missing questions array for video ${videoId}`);
-                                }
+                            if (!existingJob) {
+                                // Create MCQ generation job (will be processed by background worker)
+                                await MCQGenerationJob.create({
+                                    videoId: videoId,
+                                    courseId: courseId || video.courseId,
+                                    status: 'PENDING',
+                                    provider: 'DRISHTI_AI'
+                                });
+                                console.log(`[VideoQueue] MCQ generation job queued for video ${videoId}`);
                             } else {
-                                console.warn(`[VideoQueue] Video ${videoId} missing videoUrl, skipping MCQ generation`);
+                                console.log(`[VideoQueue] MCQ generation job already exists for video ${videoId}`);
                             }
                         } else {
-                            console.log(`[VideoQueue] AI questions already exist for video ${videoId}, skipping generation`);
+                            console.warn(`[VideoQueue] Video ${videoId} missing videoUrl, skipping MCQ job creation`);
                         }
-                    } catch (mcqError) {
+                    } catch (jobError) {
                         // Log error but don't fail transcoding
-                        console.error(`[VideoQueue] Failed to generate MCQs for video ${videoId}:`, mcqError.message);
+                        console.error(`[VideoQueue] Failed to create MCQ generation job for video ${videoId}:`, jobError.message);
                         // Do NOT throw - transcoding should still be considered successful
                     }
 
