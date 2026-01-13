@@ -37,15 +37,16 @@ const addToCart = async (req, res) => {
             });
         }
 
-        const inventory = await Inventory.findOne({ productId });
-        const available = inventory ? inventory.available : 0;
+        // Inventory availability check commented out - simplified flow
+        // const inventory = await Inventory.findOne({ productId });
+        // const available = inventory ? inventory.available : 0;
 
-        if (available < quantity) {
-            return res.status(400).json({
-                success: false,
-                message: `Insufficient stock. Available: ${available}, Requested: ${quantity}`
-            });
-        }
+        // if (available < quantity) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: `Insufficient stock. Available: ${available}, Requested: ${quantity}`
+        //     });
+        // }
 
         let cart = await Cart.findOne({ userId });
         
@@ -62,12 +63,13 @@ const addToCart = async (req, res) => {
 
         if (existingItemIndex !== -1) {
             const newQuantity = cart.items[existingItemIndex].quantity + quantity;
-            if (available < newQuantity) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Insufficient stock. Available: ${available}, Total requested: ${newQuantity}`
-                });
-            }
+            // Inventory availability check commented out - simplified flow
+            // if (available < newQuantity) {
+            //     return res.status(400).json({
+            //         success: false,
+            //         message: `Insufficient stock. Available: ${available}, Total requested: ${newQuantity}`
+            //     });
+            // }
             cart.items[existingItemIndex].quantity = newQuantity;
         } else {
             cart.items.push({
