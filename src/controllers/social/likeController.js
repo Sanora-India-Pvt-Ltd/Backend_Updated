@@ -262,3 +262,86 @@ exports.getReactions = async (req, res) => {
         });
     }
 };
+
+/**
+ * Get user's reaction status for multiple posts/reels
+ * This allows the frontend to check which posts the user has liked
+ * POST /api/likes/my-reactions
+ * Body: { content: 'post' | 'reel', contentIds: ['id1', 'id2', ...] }
+ */
+exports.getMyReactions = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { content, contentIds } = req.body;
+
+        if (!content || !['post', 'reel'].includes(content)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid content type. Must be "post" or "reel"'
+            });
+        }
+
+        if (!contentIds || !Array.isArray(contentIds) || contentIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'contentIds must be a non-empty array'
+            });
+        }
+
+        // Validate all IDs are valid ObjectIds
+        const validIds = contentIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+        if (validIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid content IDs provided'
+            });
+        }
+
+        // Find all Like documents for the given content IDs
+        const likeDocs = await Like.find({
+            content,
+            contentId: { $in: validIds }
+        }).lean();
+
+        // Build result map: contentId -> reaction type (or null if not liked)
+        const result = {};
+        const reactionTypes = Object.keys(REACTION_TYPES);
+        const userIdStr = userId.toString();
+
+        // Initialize all IDs as null (not liked)
+        validIds.forEach(id => {
+            result[id.toString()] = null;
+        });
+
+        // Check each Like document for user's reaction
+        likeDocs.forEach(likeDoc => {
+            const contentIdStr = likeDoc.contentId.toString();
+            
+            // Check each reaction type array for the user
+            for (let i = 0; i < likeDoc.likes.length; i++) {
+                const userIds = likeDoc.likes[i];
+                if (Array.isArray(userIds) && userIds.some(id => id && id.toString() === userIdStr)) {
+                    // User has reacted with this reaction type
+                    result[contentIdStr] = reactionTypes[i];
+                    break; // User can only have one reaction per content
+                }
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'User reactions retrieved successfully',
+            data: {
+                reactions: result
+            }
+        });
+
+    } catch (error) {
+        console.error('Get my reactions error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to get user reactions',
+            error: error.message
+        });
+    }
+};
