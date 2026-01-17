@@ -44,6 +44,7 @@ router.post('/emit-test', async (req, res) => {
             type: 'TEST_NOTIFICATION',
             title: 'Test',
             message: 'Notification system working',
+            channels: ['IN_APP', 'PUSH'],
             payload: {
                 source: 'debug',
                 timestamp: new Date().toISOString()
