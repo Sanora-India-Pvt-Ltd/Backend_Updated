@@ -228,7 +228,7 @@ const markAsRead = async (req, res) => {
 
 /**
  * Mark all notifications as read
- * POST /api/notifications/read-all
+ * PUT /api/notifications/read-all
  */
 const markAllAsRead = async (req, res) => {
     try {
@@ -281,9 +281,89 @@ const markAllAsRead = async (req, res) => {
     }
 };
 
+/**
+ * Mark all notifications of a specific category as read
+ * PUT /api/notifications/read-category
+ */
+const markCategoryAsRead = async (req, res) => {
+    try {
+        // Extract category from request body
+        const { category } = req.body;
+
+        // Validate category is provided
+        if (!category) {
+            return res.status(400).json({
+                success: false,
+                message: 'Category is required'
+            });
+        }
+
+        // Normalize category to uppercase
+        const categoryUpper = category.toUpperCase();
+
+        // Validate category against allowed categories
+        if (!NOTIFICATION_CATEGORIES.includes(categoryUpper)) {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid category. Allowed categories: ${NOTIFICATION_CATEGORIES.join(', ')}`
+            });
+        }
+
+        // Detect recipient from flexibleAuth
+        let recipientId, recipientType;
+        
+        if (req.user && req.userId) {
+            recipientId = req.userId;
+            recipientType = 'USER';
+        } else if (req.universityId) {
+            recipientId = req.universityId;
+            recipientType = 'UNIVERSITY';
+        } else {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required'
+            });
+        }
+
+        // Update all unread notifications of the specified category
+        const result = await Notification.updateMany(
+            {
+                recipientId,
+                recipientType,
+                category: categoryUpper,
+                isRead: false
+            },
+            {
+                $set: {
+                    isRead: true,
+                    readAt: new Date()
+                }
+            }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: 'Category notifications marked as read',
+            data: {
+                category: categoryUpper,
+                updatedCount: result.modifiedCount
+            }
+        });
+
+    } catch (error) {
+        console.error('Mark category as read error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to mark category notifications as read',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getMyNotifications,
     getUnreadCount,
     markAsRead,
-    markAllAsRead
+    markAllAsRead,
+    markCategoryAsRead
 };

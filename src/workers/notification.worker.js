@@ -141,11 +141,12 @@ const processNotificationDelivery = async (job) => {
                 const io = getSocketIO();
                 
                 if (io) {
-                    const room = recipient.role === 'UNIVERSITY' 
-                        ? `university:${recipientId.toString()}`
-                        : `user:${recipientId.toString()}`;
+                    // Standardize room naming: user:${recipientId} or university:${recipientId}
+                    const recipientType = recipient.role.toLowerCase();
+                    const room = `${recipientType}:${recipientId.toString()}`;
 
-                    io.to(room).emit('notification:new', {
+                    // Build notification payload
+                    const notificationPayload = {
                         id: notification._id.toString(),
                         title: notification.title,
                         message: notification.message,
@@ -154,7 +155,18 @@ const processNotificationDelivery = async (job) => {
                         createdAt: notification.createdAt,
                         entity: notification.entity || null,
                         payload: notification.payload || {}
+                    };
+
+                    // Debug log BEFORE emitting
+                    console.log('[SOCKET-EMIT]', {
+                        room,
+                        event: 'notification',
+                        recipientId: recipientId.toString(),
+                        recipientType: recipient.role
                     });
+
+                    // Emit to room with standardized event name
+                    io.to(room).emit('notification', notificationPayload);
 
                     console.log('🔔 Real-time notification delivered', {
                         notificationId,

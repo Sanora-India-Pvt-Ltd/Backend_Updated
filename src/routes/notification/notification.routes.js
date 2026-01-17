@@ -5,7 +5,8 @@ const {
     getMyNotifications,
     getUnreadCount,
     markAsRead,
-    markAllAsRead
+    markAllAsRead,
+    markCategoryAsRead
 } = require('../../controllers/notification/notification.controller');
 const {
     registerDeviceToken,
@@ -31,13 +32,17 @@ router.get('/', flexibleAuth, getMyNotifications);
 // GET /api/notifications/unread-count
 router.get('/unread-count', flexibleAuth, getUnreadCount);
 
+// Mark all notifications as read
+// PUT /api/notifications/read-all
+router.put('/read-all', flexibleAuth, markAllAsRead);
+
+// Mark all notifications of a category as read
+// PUT /api/notifications/read-category
+router.put('/read-category', flexibleAuth, markCategoryAsRead);
+
 // Mark a single notification as read
 // PUT /api/notifications/:notificationId/read
 router.put('/:notificationId/read', flexibleAuth, markAsRead);
-
-// Mark all notifications as read
-// POST /api/notifications/read-all
-router.post('/read-all', flexibleAuth, markAllAsRead);
 
 // Register device token for push notifications
 // POST /api/notifications/device-token
