@@ -19,6 +19,20 @@ const {
 const currentSlideStorage = new Map(); // conferenceId -> slideIndex
 
 /**
+ * Log socket event with structured format
+ */
+const logSocketEvent = (direction, eventName, data) => {
+    const timestamp = new Date().toISOString();
+    const logData = {
+        timestamp,
+        direction, // 'IN' or 'OUT'
+        event: eventName,
+        ...data
+    };
+    console.log(`[SOCKET-${direction}] ${eventName}`, JSON.stringify(logData, null, 2));
+};
+
+/**
  * Push question live (internal reusable function)
  */
 async function pushQuestionLiveInternal(io, conferenceId, questionId, duration) {
@@ -51,6 +65,13 @@ async function pushQuestionLiveInternal(io, conferenceId, questionId, duration) 
                 questionId: existingLive.questionId,
                 reason: 'manual',
                 closedAt: Date.now()
+            });
+            logSocketEvent('OUT', 'question:closed', {
+                conferenceId,
+                questionId: existingLive.questionId,
+                reason: 'manual',
+                room: `conference:${conferenceId}`,
+                triggeredBy: 'push_new_question'
             });
         }
 
@@ -98,9 +119,23 @@ async function pushQuestionLiveInternal(io, conferenceId, questionId, duration) 
         };
 
         io.to(`conference:${conferenceId}`).emit('question:live', liveQuestionData);
+        logSocketEvent('OUT', 'question:live', {
+            conferenceId,
+            questionId,
+            duration,
+            room: `conference:${conferenceId}`,
+            startedAt: liveQuestionData.startedAt,
+            expiresAt: liveQuestionData.expiresAt
+        });
 
         // Emit initial poll stats to HOST/SPEAKER (with zero counts)
         await emitPollLiveStats(io, conferenceId, questionId);
+        logSocketEvent('OUT', 'poll:live-stats', {
+            conferenceId,
+            questionId,
+            room: `host:${conferenceId}`,
+            triggeredBy: 'question:push_live'
+        });
 
         console.log(`📊 Question ${questionId} pushed live in conference ${conferenceId} (${duration}s)`);
     } finally {
@@ -117,6 +152,12 @@ const initConferenceHandlers = (io) => {
         const userId = socket.userId;
         const user = socket.user;
 
+        logSocketEvent('IN', 'connection', {
+            userId: userId?.toString(),
+            socketId: socket.id,
+            event: 'conference_handlers_connection'
+        });
+
         // Store active conferences for this socket
         const activeConferences = new Set();
 
@@ -125,9 +166,22 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('conference:join', async (data) => {
             try {
+                logSocketEvent('IN', 'conference:join', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: { conferenceId: data?.conferenceId }
+                });
+
                 const { conferenceId } = data;
                 
                 if (!conferenceId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'conference:join',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID is required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID is required',
@@ -138,6 +192,13 @@ const initConferenceHandlers = (io) => {
                 // Validate conference exists and get status
                 const conference = await Conference.findById(conferenceId);
                 if (!conference) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'conference:join',
+                        conferenceId,
+                        error: 'CONFERENCE_NOT_FOUND'
+                    });
                     return socket.emit('error', {
                         code: 'CONFERENCE_NOT_FOUND',
                         message: 'Conference not found',
@@ -148,6 +209,13 @@ const initConferenceHandlers = (io) => {
                 // Check conference status
                 const status = await conferenceService.getStatus(conferenceId) || conference.status;
                 if (status === 'ENDED') {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'conference:join',
+                        conferenceId,
+                        error: 'CONFERENCE_ENDED'
+                    });
                     return socket.emit('error', {
                         code: 'CONFERENCE_ENDED',
                         message: 'Conference has ended',
@@ -219,6 +287,14 @@ const initConferenceHandlers = (io) => {
                     role,
                     timestamp: Date.now()
                 });
+                logSocketEvent('OUT', 'conference:joined', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    conferenceId,
+                    role,
+                    audienceCount,
+                    hasLiveQuestion: !!liveQuestionData
+                });
 
                 // Emit audience joined to host (if user is audience)
                 if (!isHost) {
@@ -228,6 +304,12 @@ const initConferenceHandlers = (io) => {
                         audienceCount,
                         timestamp: Date.now()
                     });
+                    logSocketEvent('OUT', 'audience:joined', {
+                        userId: userId?.toString(),
+                        conferenceId,
+                        audienceCount,
+                        room: `host:${conferenceId}`
+                    });
                 }
 
                 // Broadcast audience count update
@@ -236,10 +318,22 @@ const initConferenceHandlers = (io) => {
                     audienceCount,
                     timestamp: Date.now()
                 });
+                logSocketEvent('OUT', 'audience:count', {
+                    conferenceId,
+                    audienceCount,
+                    room: `conference:${conferenceId}`
+                });
 
                 console.log(`✅ User ${userId} joined conference ${conferenceId} as ${role}`);
             } catch (error) {
                 console.error('Conference join error:', error);
+                logSocketEvent('OUT', 'error', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    event: 'conference:join',
+                    error: 'INTERNAL_ERROR',
+                    errorMessage: error.message
+                });
                 socket.emit('error', {
                     code: 'INTERNAL_ERROR',
                     message: 'Failed to join conference',
@@ -253,9 +347,22 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('conference:leave', async (data) => {
             try {
+                logSocketEvent('IN', 'conference:leave', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: { conferenceId: data?.conferenceId }
+                });
+
                 const { conferenceId } = data;
                 
                 if (!conferenceId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'conference:leave',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID is required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID is required',
@@ -287,6 +394,11 @@ const initConferenceHandlers = (io) => {
                     conferenceId,
                     timestamp: Date.now()
                 });
+                logSocketEvent('OUT', 'conference:left', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    conferenceId
+                });
 
                 // Emit audience left to host (if user was audience)
                 if (!isHost) {
@@ -296,6 +408,12 @@ const initConferenceHandlers = (io) => {
                         audienceCount,
                         timestamp: Date.now()
                     });
+                    logSocketEvent('OUT', 'audience:left', {
+                        userId: userId?.toString(),
+                        conferenceId,
+                        audienceCount,
+                        room: `host:${conferenceId}`
+                    });
                 }
 
                 // Broadcast audience count update
@@ -303,6 +421,11 @@ const initConferenceHandlers = (io) => {
                     conferenceId,
                     audienceCount,
                     timestamp: Date.now()
+                });
+                logSocketEvent('OUT', 'audience:count', {
+                    conferenceId,
+                    audienceCount,
+                    room: `conference:${conferenceId}`
                 });
 
                 console.log(`❌ User ${userId} left conference ${conferenceId}`);
@@ -321,9 +444,26 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('question:push_live', async (data) => {
             try {
+                logSocketEvent('IN', 'question:push_live', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId,
+                        duration: data?.duration
+                    }
+                });
+
                 const { conferenceId, questionId, duration = 45 } = data;
 
                 if (!conferenceId || !questionId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'question:push_live',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID and Question ID are required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID and Question ID are required',
@@ -334,6 +474,15 @@ const initConferenceHandlers = (io) => {
                 // Validate authority (HOST only)
                 const hostId = await conferenceService.getHost(conferenceId);
                 if (userId !== hostId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'question:push_live',
+                        conferenceId,
+                        questionId,
+                        error: 'UNAUTHORIZED',
+                        message: 'Only HOST can push questions live'
+                    });
                     return socket.emit('error', {
                         code: 'UNAUTHORIZED',
                         message: 'Only HOST can push questions live',
@@ -342,6 +491,12 @@ const initConferenceHandlers = (io) => {
                 }
 
                 await pushQuestionLiveInternal(io, conferenceId, questionId, duration);
+                logSocketEvent('OUT', 'question:push_live:success', {
+                    userId: userId?.toString(),
+                    conferenceId,
+                    questionId,
+                    duration
+                });
             } catch (error) {
                 console.error('Push question live error:', error);
                 let errorCode = 'INTERNAL_ERROR';
@@ -371,9 +526,25 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('question:close', async (data) => {
             try {
+                logSocketEvent('IN', 'question:close', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId
+                    }
+                });
+
                 const { conferenceId, questionId } = data;
 
                 if (!conferenceId || !questionId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'question:close',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID and Question ID are required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID and Question ID are required',
@@ -384,6 +555,15 @@ const initConferenceHandlers = (io) => {
                 // Validate authority
                 const hostId = await conferenceService.getHost(conferenceId);
                 if (userId !== hostId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'question:close',
+                        conferenceId,
+                        questionId,
+                        error: 'UNAUTHORIZED',
+                        message: 'Only HOST can close questions'
+                    });
                     return socket.emit('error', {
                         code: 'UNAUTHORIZED',
                         message: 'Only HOST can close questions',
@@ -394,6 +574,12 @@ const initConferenceHandlers = (io) => {
                 // Close question
                 await closeQuestion(io, conferenceId, questionId, 'manual');
 
+                logSocketEvent('OUT', 'question:close:success', {
+                    userId: userId?.toString(),
+                    conferenceId,
+                    questionId,
+                    reason: 'manual'
+                });
                 console.log(`🔒 Question ${questionId} closed manually in conference ${conferenceId}`);
             } catch (error) {
                 console.error('Close question error:', error);
@@ -410,9 +596,25 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('poll:join', async (data) => {
             try {
+                logSocketEvent('IN', 'poll:join', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId
+                    }
+                });
+
                 const { conferenceId, questionId } = data;
 
                 if (!conferenceId || !questionId) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'poll:join',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID and Question ID are required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID and Question ID are required',
@@ -436,8 +638,20 @@ const initConferenceHandlers = (io) => {
                 if (wasNew) {
                     // Emit live stats to HOST/SPEAKER only
                     await emitPollLiveStats(io, conferenceId, questionId);
+                    logSocketEvent('OUT', 'poll:live-stats', {
+                        conferenceId,
+                        questionId,
+                        room: `host:${conferenceId}`,
+                        triggeredBy: 'poll:join'
+                    });
                 }
 
+                logSocketEvent('OUT', 'poll:join:success', {
+                    userId: userId?.toString(),
+                    conferenceId,
+                    questionId,
+                    wasNew
+                });
                 console.log(`📊 User ${userId} joined poll for question ${questionId}`);
             } catch (error) {
                 console.error('Poll join error:', error);
@@ -454,9 +668,26 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('poll:vote', async (data) => {
             try {
+                logSocketEvent('IN', 'poll:vote', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId,
+                        optionKey: data?.optionKey
+                    }
+                });
+
                 const { conferenceId, questionId, optionKey } = data;
 
                 if (!conferenceId || !questionId || !optionKey) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'poll:vote',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID, Question ID, and optionKey are required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID, Question ID, and optionKey are required',
@@ -525,10 +756,29 @@ const initConferenceHandlers = (io) => {
                     optionKey: optionKeyUpper,
                     timestamp: Date.now()
                 });
+                logSocketEvent('OUT', 'poll:vote:accepted', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    conferenceId,
+                    questionId,
+                    optionKey: optionKeyUpper
+                });
 
                 // Emit live stats to HOST/SPEAKER only
                 await emitPollLiveStats(io, conferenceId, questionId);
+                logSocketEvent('OUT', 'poll:live-stats', {
+                    conferenceId,
+                    questionId,
+                    room: `host:${conferenceId}`,
+                    triggeredBy: 'poll:vote'
+                });
 
+                logSocketEvent('OUT', 'poll:vote:success', {
+                    userId: userId?.toString(),
+                    conferenceId,
+                    questionId,
+                    optionKey: optionKeyUpper
+                });
                 console.log(`✅ Vote recorded: User ${userId} voted ${optionKeyUpper} on question ${questionId}`);
             } catch (error) {
                 console.error('Poll vote error:', error);
@@ -545,9 +795,26 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('vote:submit', async (data) => {
             try {
+                logSocketEvent('IN', 'vote:submit', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId,
+                        selectedOption: data?.selectedOption
+                    }
+                });
+
                 const { conferenceId, questionId, selectedOption } = data;
 
                 if (!conferenceId || !questionId || !selectedOption) {
+                    logSocketEvent('OUT', 'vote:rejected', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId,
+                        reason: 'invalid_request'
+                    });
                     return socket.emit('vote:rejected', {
                         conferenceId,
                         questionId,
@@ -654,6 +921,14 @@ const initConferenceHandlers = (io) => {
                         isCorrect,
                         timestamp: Date.now()
                     });
+                    logSocketEvent('OUT', 'vote:accepted', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        conferenceId,
+                        questionId,
+                        selectedOption: selectedOptionUpper,
+                        isCorrect
+                    });
 
                     // Broadcast updated results to all
                     io.to(`conference:${conferenceId}`).emit('vote:result', {
@@ -663,7 +938,19 @@ const initConferenceHandlers = (io) => {
                         optionCounts: voteResult.optionCounts,
                         timestamp: Date.now()
                     });
+                    logSocketEvent('OUT', 'vote:result', {
+                        conferenceId,
+                        questionId,
+                        totalVotes: voteResult.totalVotes,
+                        room: `conference:${conferenceId}`
+                    });
 
+                    logSocketEvent('OUT', 'vote:submit:success', {
+                        userId: userId?.toString(),
+                        conferenceId,
+                        questionId,
+                        selectedOption: selectedOptionUpper
+                    });
                     console.log(`✅ Vote submitted: User ${userId} voted ${selectedOptionUpper} on question ${questionId}`);
                 } finally {
                     await lockService.release(lockKey);
@@ -681,9 +968,25 @@ const initConferenceHandlers = (io) => {
 
         socket.on('presentation:slide_change', async (data) => {
             try {
+                logSocketEvent('IN', 'presentation:slide_change', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        slideIndex: data?.slideIndex
+                    }
+                });
+
                 const { conferenceId, slideIndex } = data;
 
                 if (!conferenceId || typeof slideIndex !== 'number') {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'presentation:slide_change',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID and slideIndex are required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID and slideIndex are required',
@@ -750,12 +1053,24 @@ const initConferenceHandlers = (io) => {
                         slideIndex,
                         timestamp: Date.now()
                     });
+                    logSocketEvent('OUT', 'presentation:slide_update', {
+                        conferenceId,
+                        slideIndex,
+                        room: `conference:${conferenceId}`
+                    });
                 } finally {
                     if (redis) {
                         await redis.del(lockKey);
                     }
                 }
             } catch (err) {
+                logSocketEvent('OUT', 'error', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    event: 'presentation:slide_change',
+                    error: 'INTERNAL_ERROR',
+                    errorMessage: err.message
+                });
                 socket.emit('error', {
                     code: 'INTERNAL_ERROR',
                     message: 'Slide change failed',
@@ -769,6 +1084,11 @@ const initConferenceHandlers = (io) => {
          */
         socket.on('disconnect', async () => {
             try {
+                logSocketEvent('IN', 'disconnect', {
+                    userId: userId?.toString(),
+                    socketId: socket.id
+                });
+
                 // Remove user from all active conferences
                 const userConferences = await audienceService.getUserConferences(userId);
                 
@@ -787,6 +1107,13 @@ const initConferenceHandlers = (io) => {
                             audienceCount,
                             timestamp: Date.now()
                         });
+                        logSocketEvent('OUT', 'audience:left', {
+                            userId: userId?.toString(),
+                            conferenceId,
+                            audienceCount,
+                            room: `host:${conferenceId}`,
+                            reason: 'disconnect'
+                        });
 
                         // Broadcast count update
                         io.to(`conference:${conferenceId}`).emit('audience:count', {
@@ -794,14 +1121,30 @@ const initConferenceHandlers = (io) => {
                             audienceCount,
                             timestamp: Date.now()
                         });
+                        logSocketEvent('OUT', 'audience:count', {
+                            conferenceId,
+                            audienceCount,
+                            room: `conference:${conferenceId}`,
+                            reason: 'disconnect'
+                        });
                     }
                 }
 
                 // Clean up active conferences tracking
                 activeConferences.clear();
 
+                logSocketEvent('OUT', 'disconnect:success', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    conferencesCleaned: userConferences.length
+                });
                 console.log(`🔌 User ${userId} disconnected from conference polling`);
             } catch (error) {
+                logSocketEvent('OUT', 'disconnect:error', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    error: error.message
+                });
                 console.error('Disconnect cleanup error:', error);
             }
         });
@@ -835,13 +1178,21 @@ const startQuestionTimer = (io, conferenceId, questionId, duration) => {
         }
 
         if (timeRemaining > 0) {
-            // Emit timer update
+            // Emit timer update (log every 5 seconds to avoid spam)
             io.to(`conference:${conferenceId}`).emit('question:timer_update', {
                 conferenceId,
                 questionId,
                 timeRemaining,
                 expiresAt: endTime
             });
+            if (timeRemaining % 5 === 0 || timeRemaining <= 5) {
+                logSocketEvent('OUT', 'question:timer_update', {
+                    conferenceId,
+                    questionId,
+                    timeRemaining,
+                    room: `conference:${conferenceId}`
+                });
+            }
         } else {
             // Timer expired - close question
             clearInterval(intervalId);
@@ -893,6 +1244,7 @@ const emitPollLiveStats = async (io, conferenceId, questionId) => {
             results,
             timestamp: Date.now()
         });
+        // Note: Individual logSocketEvent calls are added at call sites to include context
     } catch (error) {
         console.error('Emit poll live stats error:', error);
     }
@@ -956,6 +1308,12 @@ const closeQuestion = async (io, conferenceId, questionId, reason) => {
             reason,
             closedAt: Date.now()
         });
+        logSocketEvent('OUT', 'question:closed', {
+            conferenceId,
+            questionId,
+            reason,
+            room: `conference:${conferenceId}`
+        });
 
         // Emit final results (with correct answer revealed)
         if (meta) {
@@ -968,6 +1326,13 @@ const closeQuestion = async (io, conferenceId, questionId, reason) => {
                 correctCount,
                 percentageBreakdown,
                 closedAt: Date.now()
+            });
+            logSocketEvent('OUT', 'vote:final_result', {
+                conferenceId,
+                questionId,
+                totalVotes: voteCounts.totalVotes,
+                correctOption: meta.correctOption,
+                room: `conference:${conferenceId}`
             });
         }
 

@@ -406,15 +406,42 @@ const initSocketServer = async (httpServer) => {
         // ============================================
 
         /**
+         * Log socket event with structured format
+         */
+        const logSocketEvent = (direction, eventName, data) => {
+            const timestamp = new Date().toISOString();
+            const logData = {
+                timestamp,
+                direction, // 'IN' or 'OUT'
+                event: eventName,
+                ...data
+            };
+            console.log(`[SOCKET-${direction}] ${eventName}`, JSON.stringify(logData, null, 2));
+        };
+
+        /**
          * Handle conference:join
          * Client emits: { conferenceId: string }
          */
         socket.on('conference:join', async (data) => {
             try {
+                logSocketEvent('IN', 'conference:join', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: { conferenceId: data?.conferenceId }
+                });
+
                 const { conferenceId } = data;
 
                 // Validate conferenceId
                 if (!conferenceId || typeof conferenceId !== 'string') {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'conference:join',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID is required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID is required'
@@ -427,6 +454,11 @@ const initSocketServer = async (httpServer) => {
 
                 // 1. Join Socket.IO room
                 socket.join(`conference:${conferenceId}`);
+                logSocketEvent('OUT', 'room:join', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    room: `conference:${conferenceId}`
+                });
                 console.log(`📥 User ${userId} joined conference ${conferenceId}`);
 
                 // 2. Determine role (HOST or AUDIENCE)
@@ -450,6 +482,12 @@ const initSocketServer = async (httpServer) => {
                 // FIX 1: JOIN HOST ROOM - If role is HOST, join host-only room
                 if (role === 'HOST') {
                     socket.join(`host:${conferenceId}`);
+                    logSocketEvent('OUT', 'room:join', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        room: `host:${conferenceId}`,
+                        role: 'HOST'
+                    });
                     console.log(`👑 HOST ${userId} joined host room for conference ${conferenceId}`);
                 }
 
@@ -496,6 +534,13 @@ const initSocketServer = async (httpServer) => {
                     role,
                     audienceCount
                 });
+                logSocketEvent('OUT', 'conference:joined', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    conferenceId,
+                    role,
+                    audienceCount
+                });
 
                 // FIX #3: On conference:join, if a live question exists in Redis, emit question:live to the joining socket
                 // This ensures users who join mid-question receive the current live question
@@ -517,7 +562,13 @@ const initSocketServer = async (httpServer) => {
                                 startedAt: liveQuestion.startedAt,
                                 expiresAt: liveQuestion.expiresAt
                             });
-                            
+                            logSocketEvent('OUT', 'question:live', {
+                                userId: userId?.toString(),
+                                socketId: socket.id,
+                                conferenceId: liveQuestion.conferenceId,
+                                questionId: liveQuestion.questionId,
+                                reason: 'join_existing_live'
+                            });
                             console.log(`📢 Sent live question ${liveQuestion.questionId} to joining user ${userId}`);
                         }
                     } catch (error) {
@@ -533,6 +584,12 @@ const initSocketServer = async (httpServer) => {
                     socket.to(`conference:${conferenceId}`).emit('audience:count', {
                         conferenceId,
                         audienceCount
+                    });
+                    logSocketEvent('OUT', 'audience:count', {
+                        conferenceId,
+                        audienceCount,
+                        room: `conference:${conferenceId}`,
+                        reason: 'new_join'
                     });
                 }
 
@@ -553,10 +610,23 @@ const initSocketServer = async (httpServer) => {
          */
         socket.on('conference:leave', async (data) => {
             try {
+                logSocketEvent('IN', 'conference:leave', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: { conferenceId: data?.conferenceId }
+                });
+
                 const { conferenceId } = data;
 
                 // Validate conferenceId
                 if (!conferenceId || typeof conferenceId !== 'string') {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'conference:leave',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID is required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID is required'
@@ -582,6 +652,11 @@ const initSocketServer = async (httpServer) => {
 
                 // 2. Leave Socket.IO room
                 socket.leave(`conference:${conferenceId}`);
+                logSocketEvent('OUT', 'room:leave', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    room: `conference:${conferenceId}`
+                });
                 console.log(`📤 User ${userId} left conference ${conferenceId}`);
 
                 // FIX 2: LEAVE HOST ROOM - If leaving user is HOST, also leave host-only room
@@ -590,6 +665,12 @@ const initSocketServer = async (httpServer) => {
                         const hostId = await redis.get(`conference:${conferenceId}:host`);
                         if (hostId === userId) {
                             socket.leave(`host:${conferenceId}`);
+                            logSocketEvent('OUT', 'room:leave', {
+                                userId: userId?.toString(),
+                                socketId: socket.id,
+                                room: `host:${conferenceId}`,
+                                role: 'HOST'
+                            });
                             console.log(`👑 HOST ${userId} left host room for conference ${conferenceId}`);
                         }
                     } catch (error) {
@@ -614,6 +695,11 @@ const initSocketServer = async (httpServer) => {
 
                 // 4. Emit to leaving socket only
                 socket.emit('conference:left', {
+                    conferenceId
+                });
+                logSocketEvent('OUT', 'conference:left', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
                     conferenceId
                 });
 
@@ -642,10 +728,27 @@ const initSocketServer = async (httpServer) => {
          */
         socket.on('question:push_live', async (data) => {
             try {
+                logSocketEvent('IN', 'question:push_live', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId,
+                        duration: data?.duration
+                    }
+                });
+
                 const { conferenceId, questionId, duration = 45 } = data;
 
                 // Validate input
                 if (!conferenceId || typeof conferenceId !== 'string') {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'question:push_live',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID is required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID is required'
@@ -683,6 +786,15 @@ const initSocketServer = async (httpServer) => {
                 }
 
                 if (!isHost) {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'question:push_live',
+                        conferenceId,
+                        questionId,
+                        error: 'UNAUTHORIZED',
+                        message: 'Only HOST can push questions live'
+                    });
                     return socket.emit('error', {
                         code: 'UNAUTHORIZED',
                         message: 'Only HOST can push questions live'
@@ -796,6 +908,15 @@ const initSocketServer = async (httpServer) => {
                             startedAt,
                             expiresAt
                         });
+                        logSocketEvent('OUT', 'question:live', {
+                            userId: userId?.toString(),
+                            conferenceId,
+                            questionId: question._id.toString(),
+                            duration,
+                            room: `conference:${conferenceId}`,
+                            startedAt,
+                            expiresAt
+                        });
 
                         console.log(`✅ HOST ${userId} pushed question ${questionId} live for conference ${conferenceId} (expires in ${duration}s)`);
 
@@ -899,6 +1020,13 @@ const initSocketServer = async (httpServer) => {
                                         questionId: liveQuestion.questionId,
                                         closedAt
                                     });
+                                    logSocketEvent('OUT', 'question:closed', {
+                                        conferenceId,
+                                        questionId: liveQuestion.questionId,
+                                        reason: 'timeout',
+                                        room: `conference:${conferenceId}`,
+                                        closedAt
+                                    });
                                     
                                     // 2️⃣ Emit question:results second
                                     io.to(`conference:${conferenceId}`).emit('question:results', {
@@ -906,6 +1034,13 @@ const initSocketServer = async (httpServer) => {
                                         questionId: liveQuestion.questionId,
                                         counts,
                                         totalResponses,
+                                        closedAt
+                                    });
+                                    logSocketEvent('OUT', 'question:results', {
+                                        conferenceId,
+                                        questionId: liveQuestion.questionId,
+                                        totalResponses,
+                                        room: `conference:${conferenceId}`,
                                         closedAt
                                     });
                                     
@@ -935,6 +1070,14 @@ const initSocketServer = async (httpServer) => {
 
                         // Emit confirmation to HOST
                         socket.emit('question:pushed', {
+                            conferenceId,
+                            questionId: question._id.toString(),
+                            startedAt,
+                            expiresAt
+                        });
+                        logSocketEvent('OUT', 'question:pushed', {
+                            userId: userId?.toString(),
+                            socketId: socket.id,
                             conferenceId,
                             questionId: question._id.toString(),
                             startedAt,
@@ -972,10 +1115,27 @@ const initSocketServer = async (httpServer) => {
          */
         socket.on('answer:submit', async (data) => {
             try {
+                logSocketEvent('IN', 'answer:submit', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    data: {
+                        conferenceId: data?.conferenceId,
+                        questionId: data?.questionId,
+                        optionKey: data?.optionKey
+                    }
+                });
+
                 const { conferenceId, questionId, optionKey } = data;
 
                 // Validate input
                 if (!conferenceId || typeof conferenceId !== 'string') {
+                    logSocketEvent('OUT', 'error', {
+                        userId: userId?.toString(),
+                        socketId: socket.id,
+                        event: 'answer:submit',
+                        error: 'INVALID_REQUEST',
+                        message: 'Conference ID is required'
+                    });
                     return socket.emit('error', {
                         code: 'INVALID_REQUEST',
                         message: 'Conference ID is required'
@@ -1082,7 +1242,20 @@ const initSocketServer = async (httpServer) => {
                     questionId,
                     optionKey
                 });
+                logSocketEvent('OUT', 'answer:submitted', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    conferenceId,
+                    questionId,
+                    optionKey
+                });
 
+                logSocketEvent('OUT', 'answer:submit:success', {
+                    userId: userId?.toString(),
+                    conferenceId,
+                    questionId,
+                    optionKey
+                });
                 console.log(`✅ User ${userId} submitted answer ${optionKey} for question ${questionId}`);
 
                 // Requirement 7: Emit updated live stats to HOST only
@@ -1112,6 +1285,13 @@ const initSocketServer = async (httpServer) => {
                         counts,
                         totalResponses
                     });
+                    logSocketEvent('OUT', 'answer:stats', {
+                        conferenceId,
+                        questionId,
+                        totalResponses,
+                        room: `host:${conferenceId}`,
+                        triggeredBy: 'answer:submit'
+                    });
 
                     console.log(`📊 Updated stats for question ${questionId}: ${totalResponses} responses`);
 
@@ -1121,6 +1301,13 @@ const initSocketServer = async (httpServer) => {
                 }
 
             } catch (error) {
+                logSocketEvent('OUT', 'error', {
+                    userId: userId?.toString(),
+                    socketId: socket.id,
+                    event: 'answer:submit',
+                    error: 'INTERNAL_ERROR',
+                    errorMessage: error.message
+                });
                 console.error('Answer submit error:', error);
                 socket.emit('error', {
                     code: 'INTERNAL_ERROR',
@@ -1138,6 +1325,13 @@ const initSocketServer = async (httpServer) => {
                 id: socket.universityId,
                 type: 'UNIVERSITY'
             } : null);
+            
+            logSocketEvent('IN', 'disconnect', {
+                userId: userId?.toString(),
+                universityId: socket.universityId?.toString(),
+                socketId: socket.id,
+                identityType: identity?.type
+            });
             
             if (identity) {
                 console.log(`🔌 Notification socket disconnected: ${identity.type} ${identity.id}`);
