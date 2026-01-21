@@ -1,6 +1,7 @@
 const express = require('express');
 const { flexibleAuth } = require('../../middleware/flexibleAuth.middleware');
 const sellerGuard = require('../../middleware/sellerGuard');
+const productReviewRoutes = require('./productReviewRoutes');
 const {
     createProduct,
     listProducts,
@@ -14,6 +15,9 @@ const router = express.Router();
 router.post('/', flexibleAuth, sellerGuard, createProduct);
 router.get('/', listProducts);
 router.get('/:id', getProductById);
+
+// Product Reviews (rating + review + images)
+router.use('/:productId/reviews', productReviewRoutes);
 
 module.exports = router;
 
