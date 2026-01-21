@@ -54,10 +54,24 @@ const upsertMyProductReview = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Review must be 5000 characters or less' });
     }
 
-    const imageIds =
-      Array.isArray(images)
-        ? images.filter((id) => mongoose.Types.ObjectId.isValid(id)).map((id) => new mongoose.Types.ObjectId(id))
-        : [];
+    // Validate and sanitize image URLs
+    let imageUrls = [];
+    if (Array.isArray(images) && images.length > 0) {
+      // Filter valid URLs (basic validation)
+      imageUrls = images
+        .filter((url) => typeof url === 'string' && url.trim().length > 0)
+        .map((url) => url.trim())
+        .filter((url) => {
+          // Basic URL validation (http/https)
+          try {
+            const urlObj = new URL(url);
+            return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+          } catch {
+            return false;
+          }
+        })
+        .slice(0, 10); // Limit to 10 images per review
+    }
 
     const review = await ProductReview.findOneAndUpdate(
       { productId, userId },
@@ -65,13 +79,12 @@ const upsertMyProductReview = async (req, res) => {
         $set: {
           rating: ratingNum,
           reviewText: reviewTextSafe,
-          images: imageIds
+          images: imageUrls
         }
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     )
-      .populate('userId', 'profile.name.full profile.profileImage')
-      .populate('images', 'url format resource_type');
+      .populate('userId', 'profile.name.full profile.profileImage');
 
     await recalcProductRating(productId);
 
@@ -114,7 +127,6 @@ const getProductReviews = async (req, res) => {
     const [reviews, total] = await Promise.all([
       ProductReview.find({ productId })
         .populate('userId', 'profile.name.full profile.profileImage')
-        .populate('images', 'url format resource_type')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)

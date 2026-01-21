@@ -27,8 +27,8 @@ const productReviewSchema = new mongoose.Schema(
     },
     images: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Media'
+        type: String, // Store image URLs directly
+        required: false
       }
     ]
   },
