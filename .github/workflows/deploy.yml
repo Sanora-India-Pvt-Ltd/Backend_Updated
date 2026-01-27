@@ -1,0 +1,43 @@
+name: Deploy Node Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ${{ secrets.EC2_PATH }}
+
+            echo "📥 Pulling latest code..."
+            git reset --hard
+            git pull origin main
+
+            echo "📦 Installing dependencies..."
+            npm install
+
+            echo "⚙️ Building project..."
+            npm run build || true
+
+            echo "🚀 Restarting server..."
+            pm2 restart all
+
+            echo "✅ Deployment finished!"
+          EOF
+
