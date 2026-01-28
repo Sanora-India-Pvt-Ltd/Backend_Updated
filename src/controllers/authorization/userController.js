@@ -1170,17 +1170,11 @@ const uploadMedia = async (req, res) => {
         }
 
         // Get user or university from flexibleAuth (supports both USER and UNIVERSITY tokens)
+        // Note: This endpoint is now public, so user/university are optional
         const user = req.user;
         const university = req.university;
         const userId = req.userId;
         const universityId = req.universityId;
-        
-        if (!user && !university) {
-            return res.status(401).json({
-                success: false,
-                message: "Authentication required"
-            });
-        }
 
         const uploadedFiles = [];
 
@@ -1216,7 +1210,7 @@ const uploadMedia = async (req, res) => {
         const mediaType = isVideoFile ? 'video' : (isAudioFile ? 'audio' : 'image');
             const format = file.mimetype.split('/')[1] || 'unknown';
 
-        // Save upload record to database - associated with user or university
+        // Save upload record to database - associated with user or university (if authenticated)
         const mediaData = {
             url: uploadResult.url,
             public_id: uploadResult.key, // Store S3 key in public_id field for backward compatibility
@@ -1224,16 +1218,17 @@ const uploadMedia = async (req, res) => {
             resource_type: mediaType,
             fileSize: file.size,
             originalFilename: file.originalname,
-            folder: user ? 'user_uploads' : 'university_uploads',
+            folder: user ? 'user_uploads' : (university ? 'university_uploads' : 'public_uploads'),
             provider: uploadResult.provider
         };
         
-        // Set userId or universityId based on token type
+        // Set userId or universityId based on token type (if authenticated)
         if (user && userId) {
             mediaData.userId = userId;
         } else if (university && universityId) {
             mediaData.universityId = universityId;
         }
+        // If neither user nor university, media is uploaded without association (public upload)
         
         const mediaRecord = await Media.create(mediaData);
 

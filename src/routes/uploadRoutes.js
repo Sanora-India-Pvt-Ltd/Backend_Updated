@@ -16,8 +16,8 @@ const {
 
 const router = express.Router();
 
-// Upload route requires authentication - accepts any field name and multiple files
-router.post("/upload", flexibleAuth, upload.any(), uploadMedia);
+// Upload route - public endpoint (no authentication required) - accepts any field name and multiple files
+router.post("/upload", upload.any(), uploadMedia);
 
 // Profile image upload route - ensures image is only associated with the authenticated user
 router.post("/profile-image", protect, upload.single("profileImage"), uploadProfileImage);
