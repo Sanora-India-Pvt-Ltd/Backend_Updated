@@ -28,7 +28,7 @@ const mediaSchema = new mongoose.Schema({
     resource_type: {
         type: String,
         required: true,
-        enum: ['image', 'video', 'raw', 'auto']
+        enum: ['image', 'video', 'audio', 'raw', 'auto', 'file', 'application', 'text']
     },
     fileSize: {
         type: Number, // Size in bytes
@@ -64,12 +64,13 @@ mediaSchema.index({ userId: 1, createdAt: -1 });
 // Index for querying by university and date
 mediaSchema.index({ universityId: 1, createdAt: -1 });
 
-// Validation: At least one of userId or universityId must be present
-mediaSchema.pre('save', async function() {
-    if (!this.userId && !this.universityId) {
-        throw new Error('Either userId or universityId must be provided');
-    }
-});
+// Validation: Allow public uploads (no userId or universityId required)
+// Files can be uploaded without user/university association for public access
+// mediaSchema.pre('save', async function() {
+//     if (!this.userId && !this.universityId) {
+//         throw new Error('Either userId or universityId must be provided');
+//     }
+// });
 
 module.exports =
   mongoose.models.Media ||

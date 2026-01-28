@@ -1209,9 +1209,16 @@ const uploadMedia = async (req, res) => {
             mediaType = 'image';
         } else {
             // Handle other file types (PPT, Excel, CSV, PDF, etc.)
-            // Extract file extension or use mimetype to determine type
+            // Map mimetype to valid enum values
             const mimetypeParts = file.mimetype.split('/');
-            mediaType = mimetypeParts[0] || 'file'; // Use first part of mimetype (e.g., 'application', 'text') or default to 'file'
+            const primaryType = mimetypeParts[0];
+            
+            // Map common mimetypes to valid enum values
+            if (primaryType === 'application' || primaryType === 'text') {
+                mediaType = primaryType; // 'application' or 'text' are now in enum
+            } else {
+                mediaType = 'file'; // Fallback to 'file' for any other type
+            }
         }
             const format = file.mimetype.split('/')[1] || 'unknown';
 
