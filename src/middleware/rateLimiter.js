@@ -14,6 +14,20 @@ const verifyRateLimiter = new RateLimiterMemory({
     blockDuration: 15 * 60 // block for 15 minutes if exceeded
 });
 
+// Auth routes: stricter limit per IP (e.g. login/signup/refresh)
+const authRateLimiter = new RateLimiterMemory({
+    points: 30,
+    duration: 60, // 30 requests per minute per IP
+    blockDuration: 60
+});
+
+// Comment / like / report routes: per-IP limit
+const socialRateLimiter = new RateLimiterMemory({
+    points: 100,
+    duration: 60, // 100 requests per minute per IP
+    blockDuration: 60
+});
+
 const limitOTPRequests = async (req, res, next) => {
     try {
         const email = req.body?.email;
@@ -68,7 +82,46 @@ const limitVerifyRequests = async (req, res, next) => {
     }
 };
 
+const getClientIp = (req) =>
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+
+const authRateLimitMiddleware = async (req, res, next) => {
+    try {
+        const key = `auth_${getClientIp(req)}`;
+        await authRateLimiter.consume(key);
+        next();
+    } catch (error) {
+        if (error.remainingPoints !== undefined) {
+            return res.status(429).json({
+                success: false,
+                message: 'Too many auth requests. Please try again later.'
+            });
+        }
+        console.error('Auth rate limiter error:', error.message);
+        next();
+    }
+};
+
+const socialRateLimitMiddleware = async (req, res, next) => {
+    try {
+        const key = `social_${getClientIp(req)}`;
+        await socialRateLimiter.consume(key);
+        next();
+    } catch (error) {
+        if (error.remainingPoints !== undefined) {
+            return res.status(429).json({
+                success: false,
+                message: 'Too many requests. Please try again later.'
+            });
+        }
+        console.error('Social rate limiter error:', error.message);
+        next();
+    }
+};
+
 module.exports = {
     limitOTPRequests,
-    limitVerifyRequests
+    limitVerifyRequests,
+    authRateLimitMiddleware,
+    socialRateLimitMiddleware
 };

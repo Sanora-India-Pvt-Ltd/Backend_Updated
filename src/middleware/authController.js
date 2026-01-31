@@ -1,5 +1,5 @@
-const emailService = require('../../services/emailService');
-const { createOTPRecord, validateOTP } = require('../../services/otpService');
+const emailService = require('../core/infra/email');
+const { createOTPRecord, validateOTP } = require('../core/infra/otp');
 const User = require('../models/authorization/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');

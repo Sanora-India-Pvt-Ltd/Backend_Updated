@@ -1,6 +1,6 @@
 const CourseInvite = require('../../models/course/CourseInvite');
 const crypto = require('crypto');
-const { getRedis } = require('../../config/redisConnection');
+const { getClient: getRedis } = require('../../core/infra/cache');
 
 /**
  * Generate invite token (crypto.randomBytes + hash)

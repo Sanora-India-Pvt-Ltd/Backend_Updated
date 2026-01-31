@@ -2,7 +2,7 @@ const multer = require('multer');
 const multerS3 = require('multer-s3');
 const s3 = require('../config/s3');
 const path = require('path');
-const { isVideo } = require('../services/videoTranscoder');
+const { isVideo } = require('../core/infra/videoTranscoder');
 
 // Disk storage for videos (needed for transcoding)
 const diskStorage = multer.diskStorage({

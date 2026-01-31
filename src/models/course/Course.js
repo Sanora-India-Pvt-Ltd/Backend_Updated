@@ -73,6 +73,8 @@ courseSchema.index({ inviteOnly: 1 });
 courseSchema.index({ isInviteOnly: 1 });
 courseSchema.index({ status: 1 });
 courseSchema.index({ createdAt: -1 });
+courseSchema.index({ universityId: 1, createdAt: -1 });
+courseSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Course', courseSchema);
 

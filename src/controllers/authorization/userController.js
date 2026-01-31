@@ -174,8 +174,8 @@ async function getOrCreateInstitutions(institutionData, userId) {
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const twilio = require('twilio');
-const StorageService = require('../../services/storage.service');
-const { isVideo } = require('../../services/videoTranscoder');
+const StorageService = require('../../core/infra/storage');
+const { isVideo } = require('../../core/infra/videoTranscoder');
 
 // Helper function to check if two users are friends
 const areFriends = async (userId1, userId2) => {

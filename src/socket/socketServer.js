@@ -1,4 +1,4 @@
-const { Server } = require('socket.io');
+const { Server } = require('../core/infra/realtime');
 const jwt = require('jsonwebtoken');
 const User = require('../models/authorization/User');
 const Message = require('../models/social/Message');
@@ -6,7 +6,7 @@ const Conversation = require('../models/social/Conversation');
 const ConferenceQuestion = require('../models/conference/ConferenceQuestion');
 const { setUserOnline, setUserOffline, isUserOnline, getRedisSubscriber, getRedisPublisher, waitForRedisReady } = require('../config/redisStub');
 const { initConferenceHandlers } = require('./conferenceHandlers');
-const { getRedis } = require('../config/redisConnection');
+const { getClient: getRedis } = require('../core/infra/cache');
 
 let io = null;
 

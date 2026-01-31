@@ -53,6 +53,7 @@ const conversationSchema = new mongoose.Schema({
 
 // Index for faster queries
 conversationSchema.index({ participants: 1 });
+conversationSchema.index({ participants: 1, lastMessageAt: -1 });
 conversationSchema.index({ lastMessageAt: -1 });
 conversationSchema.index({ updatedAt: -1 });
 conversationSchema.index({ conferenceId: 1 });

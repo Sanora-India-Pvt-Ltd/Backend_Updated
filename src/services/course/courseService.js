@@ -1,5 +1,5 @@
 const Course = require('../../models/course/Course');
-const { getRedis } = require('../../config/redisConnection');
+const { getClient: getRedis } = require('../../core/infra/cache');
 
 /**
  * Create course with university validation

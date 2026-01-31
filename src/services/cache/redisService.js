@@ -1,4 +1,4 @@
-const { getRedis } = require('../../config/redisConnection');
+const { getClient: getRedis } = require('../../core/infra/cache');
 
 /**
  * Cache course metadata (5-15 min TTL)

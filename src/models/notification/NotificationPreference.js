@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { NOTIFICATION_CATEGORIES } = require('../../constants/notificationCategories');
+const { NOTIFICATION_CATEGORIES } = require('../../core/constants/notificationCategories');
 
 /**
  * Notification Preference Model

@@ -1,8 +1,8 @@
 const { Worker } = require('bullmq');
-const { createRedisConnection } = require('../config/redis');
+const { createRedisConnection } = require('../core/infra/cache');
 const Notification = require('../models/notification/Notification');
 const NotificationPreference = require('../models/notification/NotificationPreference');
-const { sendPushNotification } = require('../services/notification/pushNotification.service');
+const { sendPushNotification } = require('../core/infra/pushNotification');
 const mongoose = require('mongoose');
 
 /**
@@ -27,8 +27,8 @@ let notificationWorker = null;
 const getSocketIO = () => {
     try {
         // Method 1: From socketServer module
-        const { getIO } = require('../socket/socketServer');
-        return getIO();
+        const realtime = require('../core/infra/realtime');
+        return realtime.getIO();
     } catch (error) {
         // Method 2: From global (if set)
         if (global.io) {

@@ -1,5 +1,5 @@
 const { Queue } = require('bullmq');
-const { createRedisConnection } = require('../config/redis');
+const { createRedisConnection } = require('../core/infra/cache');
 
 /**
  * Notification Delivery Queue

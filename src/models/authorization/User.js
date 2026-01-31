@@ -261,6 +261,11 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Indexes for query and sort performance (profile.email unique index from schema)
+userSchema.index({ 'profile.phoneNumbers.primary': 1 }, { sparse: true });
+userSchema.index({ 'social.blockedUsers': 1 });
+userSchema.index({ 'profile.name.full': 1 });
+
 // Pre-save hook to update last login and handle authentication token migration
 userSchema.pre('save', async function() {
     try {

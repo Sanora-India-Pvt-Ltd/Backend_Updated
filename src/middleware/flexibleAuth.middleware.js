@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/authorization/User');
 const University = require('../models/auth/University');
-const { getRedis } = require('../config/redisConnection');
+const { getClient: getRedis } = require('../core/infra/cache');
 
 /**
  * Flexible authentication middleware

@@ -1,205 +1,46 @@
-const UserCourseProgress = require('../../models/progress/UserCourseProgress');
-const UserVideoProgress = require('../../models/progress/UserVideoProgress');
-const Video = require('../../models/course/Video');
-const Course = require('../../models/course/Course');
+const progressService = require('../../app/services/progress.service');
 
-/**
- * Get aggregated stats for user in course
- */
 const getCourseProgress = async (req, res) => {
-    try {
-        const { courseId } = req.params;
-        const userId = req.userId; // From user auth middleware
-
-        if (!userId) {
-            return res.status(401).json({
-                success: false,
-                message: 'Authentication required'
-            });
-        }
-
-        // Get course progress
-        const courseProgress = await UserCourseProgress.findOne({
-            userId,
-            courseId
-        }).lean();
-
-        if (!courseProgress) {
-            return res.status(404).json({
-                success: false,
-                message: 'You are not enrolled in this course'
-            });
-        }
-
-        // Get total videos in course
-        const totalVideos = await Video.countDocuments({ courseId });
-
-        // Ensure completedVideos and completionPercent have default values
-        const completedVideos = courseProgress.completedVideos ?? 0;
-        const completionPercent = courseProgress.completionPercent ?? 0;
-
-        // Explicitly pick fields to avoid leaking any nested "progress" property
-        const {
-            _id,
-            userId: progressUserId,
-            courseId: progressCourseId,
-            lastAccessedAt,
-            updatedAt,
-            createdAt
-        } = courseProgress;
-
-        res.status(200).json({
-            success: true,
-            message: 'Course progress retrieved successfully',
-            data: {
-                progress: {
-                    _id,
-                    userId: progressUserId,
-                    courseId: progressCourseId,
-                    completedVideos,
-                    completionPercent,
-                    lastAccessedAt,
-                    updatedAt,
-                    createdAt,
-                    totalVideos,
-                    remainingVideos: totalVideos - completedVideos
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Get course progress error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error retrieving course progress',
-            error: error.message
-        });
-    }
+  try {
+    const result = await progressService.getCourseProgress(req.userId, req.params);
+    return res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error retrieving course progress',
+      error: err.message
+    });
+  }
 };
 
-/**
- * Get overall completion % & other stats
- */
 const getCompletionStats = async (req, res) => {
-    try {
-        const userId = req.userId; // From user auth middleware
-
-        if (!userId) {
-            return res.status(401).json({
-                success: false,
-                message: 'Authentication required'
-            });
-        }
-
-        // Get all course progress
-        const courseProgressList = await UserCourseProgress.find({ userId }).lean();
-
-        // Get stats for each course
-        const stats = await Promise.all(
-            courseProgressList.map(async (progress) => {
-                const totalVideos = await Video.countDocuments({ courseId: progress.courseId });
-                const course = await Course.findById(progress.courseId).select('name').lean();
-
-                return {
-                    courseId: progress.courseId,
-                    courseName: course?.name || 'Unknown',
-                    completedVideos: progress.completedVideos ?? 0,
-                    totalVideos,
-                    completionPercent: progress.completionPercent ?? 0
-                };
-            })
-        );
-
-        res.status(200).json({
-            success: true,
-            message: 'Completion stats retrieved successfully',
-            data: { stats }
-        });
-    } catch (error) {
-        console.error('Get completion stats error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error retrieving completion stats',
-            error: error.message
-        });
-    }
+  try {
+    const result = await progressService.getCompletionStats(req.userId);
+    return res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error retrieving completion stats',
+      error: err.message
+    });
+  }
 };
 
-/**
- * Reset progress (admin only)
- */
 const resetProgress = async (req, res) => {
-    try {
-        const { courseId, userId: targetUserId } = req.params;
-        const userId = req.userId; // From user auth middleware
-
-        if (!userId) {
-            return res.status(401).json({
-                success: false,
-                message: 'Authentication required'
-            });
-        }
-
-        // Check if user is admin (you can add admin check here)
-        // For now, allow course owner to reset progress
-        const course = await Course.findById(courseId);
-        if (!course) {
-            return res.status(404).json({
-                success: false,
-                message: 'Course not found'
-            });
-        }
-
-        // Verify admin or course owner
-        const User = require('../../models/authorization/User');
-        const user = await User.findById(userId);
-        const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'admin';
-        const isCourseOwner = course.universityId.toString() === userId.toString();
-
-        if (!isAdmin && !isCourseOwner) {
-            return res.status(403).json({
-                success: false,
-                message: 'You do not have permission to reset progress'
-            });
-        }
-
-        const targetUserIdToReset = targetUserId || userId;
-
-        // Delete video progress
-        const videos = await Video.find({ courseId }).select('_id').lean();
-        const videoIds = videos.map(v => v._id);
-        await UserVideoProgress.deleteMany({
-            userId: targetUserIdToReset,
-            videoId: { $in: videoIds }
-        });
-
-        // Reset course progress
-        await UserCourseProgress.findOneAndUpdate(
-            { userId: targetUserIdToReset, courseId },
-            {
-                completedVideos: 0,
-                completionPercent: 0,
-                lastAccessedAt: new Date()
-            },
-            { upsert: true }
-        );
-
-        res.status(200).json({
-            success: true,
-            message: 'Progress reset successfully'
-        });
-    } catch (error) {
-        console.error('Reset progress error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error resetting progress',
-            error: error.message
-        });
-    }
+  try {
+    const result = await progressService.resetProgress(req.userId, req.params);
+    return res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error resetting progress',
+      error: err.message
+    });
+  }
 };
 
 module.exports = {
-    getCourseProgress,
-    getCompletionStats,
-    resetProgress
+  getCourseProgress,
+  getCompletionStats,
+  resetProgress
 };
-

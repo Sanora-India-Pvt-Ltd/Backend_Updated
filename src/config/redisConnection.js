@@ -111,11 +111,67 @@ const closeRedis = async () => {
     }
 };
 
+/**
+ * Get Redis connection options for BullMQ (job queues).
+ * BullMQ requires maxRetriesPerRequest: null, enableReadyCheck: false.
+ */
+const getRedisConnectionOptions = () => {
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) return null;
+    try {
+        let host, port, password, username;
+        if (redisUrl.includes("://")) {
+            const url = new URL(redisUrl);
+            host = url.hostname;
+            port = parseInt(url.port) || 6379;
+            username = url.username || undefined;
+            password = url.password || undefined;
+        } else {
+            const parts = redisUrl.split(":");
+            host = parts[0];
+            port = parseInt(parts[1]) || 6379;
+            password = parts[2] || undefined;
+        }
+        return {
+            host,
+            port,
+            password,
+            username,
+            maxRetriesPerRequest: null,
+            enableReadyCheck: false,
+            lazyConnect: true,
+            retryStrategy: (times) => Math.min(times * 100, 2000)
+        };
+    } catch (error) {
+        console.error("❌ Failed to parse Redis URL:", error.message);
+        return null;
+    }
+};
+
+/**
+ * Create a new Redis connection for BullMQ (job queues need their own instance).
+ */
+const createRedisConnection = () => {
+    const opts = getRedisConnectionOptions();
+    if (!opts) return null;
+    try {
+        const redis = new Redis(opts);
+        redis.on("error", (err) => console.error("❌ BullMQ Redis connection error:", err.message));
+        redis.on("ready", () => console.log("✅ BullMQ Redis connection ready"));
+        return redis;
+    } catch (error) {
+        console.error("❌ Failed to create BullMQ Redis connection:", error.message);
+        return null;
+    }
+};
+
 module.exports = {
     initRedis,
     getRedis,
     getRedisSubscriber,
     getRedisPublisher,
     isRedisReady,
-    closeRedis
+    closeRedis,
+    getRedisConnectionOptions,
+    createRedisConnection
 };

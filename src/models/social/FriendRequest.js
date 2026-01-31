@@ -33,5 +33,9 @@ friendRequestSchema.index({ receiver: 1, status: 1 });
 // Index for querying requests by sender
 friendRequestSchema.index({ sender: 1, status: 1 });
 
+// Indexes for sort by createdAt with sender/receiver filter
+friendRequestSchema.index({ sender: 1, createdAt: -1 });
+friendRequestSchema.index({ receiver: 1, createdAt: -1 });
+
 module.exports = mongoose.model('FriendRequest', friendRequestSchema);
 

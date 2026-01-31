@@ -41,6 +41,7 @@ courseEnrollmentSchema.index({ courseId: 1, status: 1 });
 courseEnrollmentSchema.index({ userId: 1, status: 1 });
 courseEnrollmentSchema.index({ status: 1, createdAt: -1 });
 courseEnrollmentSchema.index({ expiresAt: 1 }); // For expiry queries
+courseEnrollmentSchema.index({ courseId: 1, createdAt: -1 });
 
 // Pre-save hook: Check expiry before saving
 courseEnrollmentSchema.pre('save', async function() {

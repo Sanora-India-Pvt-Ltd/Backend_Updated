@@ -1,5 +1,5 @@
-const { getRedis } = require('../../config/redisConnection');
-const { emitNotification } = require('./notificationEmitter');
+const { getClient: getRedis } = require('../../core/infra/cache');
+const { emitNotification } = require('../../core/infra/notificationEmitter');
 
 /**
  * Notification Queue Service

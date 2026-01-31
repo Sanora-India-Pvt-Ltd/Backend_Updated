@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const University = require('../models/auth/University');
-const { getRedis } = require('../config/redisConnection');
+const { getClient: getRedis } = require('../core/infra/cache');
 
 /**
  * Verify JWT from Authorization header

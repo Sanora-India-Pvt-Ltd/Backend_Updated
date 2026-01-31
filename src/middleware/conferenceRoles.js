@@ -1,3 +1,4 @@
+const jwt = require('jsonwebtoken');
 const Conference = require('../models/conference/Conference');
 const Speaker = require('../models/conference/Speaker');
 const Host = require('../models/conference/Host');
@@ -185,11 +186,90 @@ const attachConferenceRole = async (req, res, next) => {
     }
 };
 
+/**
+ * Middleware to support multiple auth types (Host, Speaker, User).
+ * Checks token type from JWT payload and attaches req.hostUser, req.speaker, or req.user.
+ * Routes use this instead of importing models directly.
+ */
+const multiAuth = async (req, res, next) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized to access this route'
+            });
+        }
+
+        const token = authHeader.split(' ')[1];
+
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+
+            if (decoded.type === 'host') {
+                const host = await Host.findById(decoded.id).select('-security.passwordHash -sessions');
+                if (!host) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Host not found'
+                    });
+                }
+                if (!host.account?.status?.isActive) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Host account is inactive'
+                    });
+                }
+                req.hostUser = host;
+                return next();
+            }
+            if (decoded.type === 'speaker') {
+                const speaker = await Speaker.findById(decoded.id).select('-security.passwordHash -sessions');
+                if (!speaker) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Speaker not found'
+                    });
+                }
+                if (!speaker.account?.status?.isActive) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Speaker account is inactive'
+                    });
+                }
+                req.speaker = speaker;
+                return next();
+            }
+
+            const user = await User.findById(decoded.id).select('-auth');
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'User not found'
+                });
+            }
+            req.user = user;
+            return next();
+        } catch (jwtError) {
+            return res.status(401).json({
+                success: false,
+                message: 'Not authorized, token failed'
+            });
+        }
+    } catch (error) {
+        return res.status(401).json({
+            success: false,
+            message: 'Authentication error'
+        });
+    }
+};
+
 module.exports = {
     ROLES,
     getUserConferenceRole,
     requireConferenceRole,
     requireHostOrSuperAdmin,
-    attachConferenceRole
+    attachConferenceRole,
+    multiAuth
 };
 

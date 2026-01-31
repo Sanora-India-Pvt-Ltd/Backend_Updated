@@ -1,205 +1,21 @@
 const passport = require('../../middleware/passport');
 const jwt = require('jsonwebtoken');
-const User = require('../../models/authorization/User');
 const { generateAccessToken, generateRefreshToken } = require('../../middleware/auth');
-
-// Maximum number of devices a user can be logged in on simultaneously
-const MAX_DEVICES = 5;
-
-// Helper function to manage device limit - removes oldest device if limit is reached
-const manageDeviceLimit = (user) => {
-    if (!user.auth) user.auth = {};
-    if (!user.auth.tokens) user.auth.tokens = {};
-    if (!user.auth.tokens.refreshTokens) user.auth.tokens.refreshTokens = [];
-    
-    // If we've reached the limit, remove the oldest device (sorted by createdAt)
-    if (user.auth.tokens.refreshTokens.length >= MAX_DEVICES) {
-        // Sort by createdAt (oldest first) and remove the first one
-        user.auth.tokens.refreshTokens.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-        user.auth.tokens.refreshTokens.shift(); // Remove the oldest device
-    }
-};
-
-// Generate JWT Token (legacy - now uses access token)
-const generateToken = (user) => {
-    return generateAccessToken({
-        id: user._id,
-        email: user.profile?.email,
-        name: user.profile?.name?.full,
-        isGoogleOAuth: user.auth?.googleId ? true : false
-    });
-};
-
-
-const { OAuth2Client } = require('google-auth-library');
-
-// Support WEB, Android, and iOS client IDs
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID; // WEB client ID
-const GOOGLE_ANDROID_CLIENT_ID = process.env.GOOGLE_ANDROID_CLIENT_ID; // Android client ID
-const GOOGLE_IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID; // iOS client ID
-
-// Collect all valid client IDs
-const validClientIds = [];
-if (GOOGLE_CLIENT_ID) validClientIds.push(GOOGLE_CLIENT_ID);
-if (GOOGLE_ANDROID_CLIENT_ID) validClientIds.push(GOOGLE_ANDROID_CLIENT_ID);
-if (GOOGLE_IOS_CLIENT_ID) validClientIds.push(GOOGLE_IOS_CLIENT_ID);
-
-const client = validClientIds.length > 0 ? new OAuth2Client() : null;
+const authSocialService = require('../../app/services/authSocial.service');
 
 // MOBILE GOOGLE LOGIN (Android/iOS)
 const googleLoginMobile = async (req, res) => {
-    try {
-        const { idToken, platform } = req.body;
-        
-        // Detect platform from body or headers
-        const detectedPlatform = platform || 
-                                 req.headers['x-platform'] || 
-                                 (req.headers['user-agent']?.toLowerCase().includes('ios') ? 'ios' : 
-                                  req.headers['user-agent']?.toLowerCase().includes('android') ? 'android' : null);
-        
-        if (!idToken) {
-            return res.status(400).json({
-                success: false,
-                message: "idToken is required"
-            });
-        }
-
-        if (!client || validClientIds.length === 0) {
-            return res.status(500).json({
-                success: false,
-                message: "Google OAuth not configured. Please set GOOGLE_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID, and/or GOOGLE_IOS_CLIENT_ID"
-            });
-        }
-
-        // Verify Google token against all valid client IDs (Web, Android, iOS)
-        let ticket;
-        let payload;
-        let verified = false;
-        
-        for (const clientId of validClientIds) {
-            try {
-                ticket = await client.verifyIdToken({
-                    idToken,
-                    audience: clientId
-                });
-                payload = ticket.getPayload();
-                verified = true;
-                break; // Successfully verified, exit loop
-            } catch (err) {
-                // Try next client ID
-                continue;
-            }
-        }
-        
-        if (!verified) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid Google token - token does not match any configured client ID",
-                error: `Please ensure you are using the correct Google Sign-In configuration for your platform (${detectedPlatform || 'Android/iOS'})`
-            });
-        }
-
-        const email = payload.email.toLowerCase();
-        const name = payload.name;
-        const googleId = payload.sub;
-        const picture = payload.picture;
-
-        // Find or create user
-        let user = await User.findOne({ 'profile.email': email });
-
-        if (!user) {
-            const nameParts = name.split(" ");
-            user = await User.create({
-                profile: {
-                    email,
-                    name: {
-                        first: nameParts[0] || 'User',
-                        last: nameParts.slice(1).join(" ") || 'User',
-                        full: name
-                    },
-                    gender: 'Other', // Default gender since Google doesn't provide this
-                    profileImage: picture
-                },
-                auth: {
-                    password: "oauth-user",
-                    isGoogleOAuth: true,
-                    googleId: googleId,
-                    tokens: {
-                        refreshTokens: []
-                    }
-                },
-                account: {
-                    isActive: true,
-                    isVerified: false
-                },
-                social: {
-                    friends: [],
-                    blockedUsers: []
-                },
-                location: {},
-                professional: {
-                    education: [],
-                    workplace: []
-                },
-                content: {
-                    generalWeightage: 0,
-                    professionalWeightage: 0
-                }
-            });
-        } else {
-            if (!user.auth) user.auth = {};
-            if (!user.auth.googleId) user.auth.googleId = googleId;
-            if (!user.profile) user.profile = {};
-            if (!user.profile.profileImage) user.profile.profileImage = picture;
-            user.auth.isGoogleOAuth = true;
-            await user.save();
-        }
-
-        // Tokens
-        const accessToken = generateAccessToken({
-            id: user._id,
-            email: user.profile?.email,
-            name: user.profile?.name?.full
-        });
-
-        const { token: refreshToken, expiryDate } = generateRefreshToken();
-        
-        // Get device info from request (optional)
-        const deviceInfo = req.headers['user-agent'] || req.body.deviceInfo || 'Unknown Device';
-
-        // Initialize refreshTokens array if it doesn't exist
-        // Manage device limit - remove oldest device if limit is reached
-        manageDeviceLimit(user);
-
-        // Add new refresh token to array (allows multiple devices, max 5)
-        user.auth.tokens.refreshTokens.push({
-            token: refreshToken,
-            expiresAt: expiryDate,
-            device: deviceInfo.substring(0, 200), // Limit length
-            createdAt: new Date()
-        });
-        
-        await user.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Google Sign-in successful",
-            data: {
-                accessToken,
-                refreshToken,
-                user
-            }
-        });
-
-    } catch (err) {
-        console.error("Mobile Google Login Error (Android/iOS):", err);
-        return res.status(500).json({
-            success: false,
-            message: "Invalid Google token",
-            error: err.message,
-            note: "Please ensure you are using the correct Google Sign-In configuration for your platform (Android/iOS)"
-        });
-    }
+  try {
+    const result = await authSocialService.googleLoginMobile(req.body, req.headers);
+    return res.status(result.statusCode).json(result.json);
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: 'Invalid Google token',
+      error: err.message,
+      note: 'Please ensure you are using the correct Google Sign-In configuration for your platform (Android/iOS)'
+    });
+  }
 };
 
 
@@ -534,26 +350,16 @@ const googleCallback = (req, res, next) => {
 
 // Check if email exists
 const checkEmailExists = async (req, res) => {
-    try {
-        const { email } = req.body;
-        
-        const user = await User.findOne({ 'profile.email': email });
-        
-        res.json({
-            success: true,
-            exists: !!user,
-            data: {
-                email,
-                hasGoogleAccount: !!user?.auth?.googleId
-            }
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Error checking email',
-            error: error.message
-        });
-    }
+  try {
+    const result = await authSocialService.checkEmailExists(req.body);
+    return res.status(result.statusCode).json(result.json);
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Error checking email',
+      error: error.message
+    });
+  }
 };
 
 module.exports = {

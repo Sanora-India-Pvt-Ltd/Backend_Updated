@@ -72,6 +72,9 @@ dns.resolve4('verify.twilio.com', (err, addresses) => {
 
 require('dotenv').config();
 
+const { registerProcessHandlers } = require('./core/processHandlers');
+registerProcessHandlers();
+
 // Debug: Check if MONGODB_URI is loaded (only show first part for security)
 if (process.env.MONGODB_URI) {
     const uriPreview = process.env.MONGODB_URI.substring(0, 30) + '...';
@@ -94,7 +97,13 @@ const User = require('./models/authorization/User');
 const jwt = require('jsonwebtoken');
 
 // Connect to MongoDB
-connectDB();
+connectDB().then(() => {
+    try {
+        require('./core/utils/mongoosePerf').enableMongooseDebug();
+    } catch (_) {
+        // ignore if module or init fails
+    }
+});
 
 const app = express();
 
@@ -107,20 +116,61 @@ app.use(cors({
     credentials: true
 }));
 
-// Request logging middleware (for debugging)
-app.use((req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-        console.log(`📥 ${req.method} ${req.path}`);
-        if (Object.keys(req.body || {}).length > 0) {
-            console.log(`   Body:`, JSON.stringify(req.body));
-        }
-    }
-    next();
-});
+const requestLoggerMiddleware = require('./app/middlewares/requestLogger.middleware');
+app.use(requestLoggerMiddleware);
 
 // JSON parser (must be before routes)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+const responseTimeoutMiddleware = require('./app/middlewares/responseTimeout.middleware');
+app.use(responseTimeoutMiddleware(30 * 1000)); // 30s global fail-safe
+
+// Health check (DB, Redis, queue) — no auth, minimal deps
+app.get('/health', async (req, res) => {
+    const mongoose = require('mongoose');
+    const { isRedisReady, getRedis } = require('./core/infra/cache');
+    const { getTranscodingQueueStats } = require('./core/infra/eventBus');
+
+    const dbStatus = mongoose.connection.readyState === 1 ? 'up' : 'down';
+    let redisStatus = 'down';
+    if (isRedisReady()) {
+        try {
+            const client = getRedis();
+            if (client) await client.ping();
+            redisStatus = 'up';
+        } catch (_) {
+            redisStatus = 'down';
+        }
+    } else {
+        redisStatus = 'unconfigured';
+    }
+    let queueStatus = 'down';
+    try {
+        getTranscodingQueueStats();
+        queueStatus = 'up';
+    } catch (_) {
+        queueStatus = 'down';
+    }
+
+    const ok = dbStatus === 'up';
+    res.status(ok ? 200 : 503).json({
+        status: ok ? 'ok' : 'degraded',
+        timestamp: new Date().toISOString(),
+        db: dbStatus,
+        redis: redisStatus,
+        queue: queueStatus
+    });
+});
+
+// Metrics (in-memory counters: requests_total, errors_total, route_latency_ms)
+const metrics = require('./core/metrics');
+app.get('/metrics', (req, res) => {
+    res.json(metrics.getSnapshot());
+});
+app.get('/metrics/summary', (req, res) => {
+    res.json(metrics.getTopSlowRoutes());
+});
 
 // Error handler for JSON parsing errors
 app.use((err, req, res, next) => {
@@ -440,9 +490,11 @@ try {
     });
 }
 
-// Auth routes - wrapped in try-catch to ensure server starts even if routes fail to load
+// Auth routes - rate-limited, wrapped in try-catch
+const { authRateLimitMiddleware, socialRateLimitMiddleware } = require('./middleware/rateLimiter');
 try {
     console.log('🔄 Loading auth routes...');
+    app.use('/api/auth', authRateLimitMiddleware);
     app.use('/api/auth', require('./routes/authorization/authRoutes'));
     console.log('✅ Auth routes loaded successfully');
 } catch (error) {
@@ -593,9 +645,10 @@ try {
     });
 }
 
-// Comment routes - for comments on posts and reels
+// Comment routes - rate-limited
 try {
     console.log('🔄 Loading comment routes...');
+    app.use('/api/comments', socialRateLimitMiddleware);
     app.use('/api/comments', require('./routes/social/commentRoutes'));
     console.log('✅ Comment routes loaded successfully');
 } catch (error) {
@@ -610,9 +663,10 @@ try {
     });
 }
 
-// User report routes
+// User report routes - rate-limited
 try {
     console.log('🔄 Loading user report routes...');
+    app.use('/api/reports', socialRateLimitMiddleware);
     app.use('/api/reports', require('./routes/social/userReportRoutes'));
     console.log('✅ User report routes loaded successfully');
 } catch (error) {
@@ -627,9 +681,10 @@ try {
     });
 }
 
-// Like routes - for post and reel reactions
+// Like routes - rate-limited
 try {
     console.log('🔄 Loading like routes...');
+    app.use('/api/likes', socialRateLimitMiddleware);
     app.use('/api/likes', require('./routes/social/likeRoutes'));
     console.log('✅ Like routes loaded successfully');
 } catch (error) {
@@ -1487,10 +1542,10 @@ const httpServer = http.createServer(app);
 httpServer.app = app;
 
 // Initialize Redis connection for conference polling
-const { initRedis } = require('./config/redisConnection');
+const { initRedis } = require('./core/infra/cache');
 
 // Initialize Socket.IO server (must be awaited to ensure Redis connections are ready)
-const { initSocketServer } = require('./socket/socketServer');
+const { initSocketServer } = require('./core/infra/realtime');
 
 // Initialize MCQ generation worker
 const { startMCQGenerationWorker } = require('./workers/mcqGenerationWorker');
@@ -1537,7 +1592,7 @@ const { startMCQGenerationWorker } = require('./workers/mcqGenerationWorker');
     } else {
         console.log('✅ Email configuration looks good!');
     }
-    const { isRedisReady } = require('./config/redisConnection');
+    const { isRedisReady } = require('./core/infra/cache');
     if (isRedisReady()) {
         console.log('✅ Redis enabled - conference polling can scale horizontally');
     } else {
@@ -1556,14 +1611,14 @@ const { startMCQGenerationWorker } = require('./workers/mcqGenerationWorker');
 // ✅ Graceful shutdown
 process.on('SIGTERM', async () => {
     console.log('🛑 SIGTERM received, shutting down gracefully...');
-    const { closeRedis } = require('./config/redisConnection');
+    const { closeRedis } = require('./core/infra/cache');
     await closeRedis();
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
     console.log('🛑 SIGINT received, shutting down gracefully...');
-    const { closeRedis } = require('./config/redisConnection');
+    const { closeRedis } = require('./core/infra/cache');
     await closeRedis();
     process.exit(0);
 });

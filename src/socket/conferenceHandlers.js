@@ -14,7 +14,7 @@ const {
     lockService,
     pollStatsService,
     timerIntervals
-} = require('../services/conferencePollingService');
+} = require('../app/services/conferencePolling');
 
 const currentSlideStorage = new Map(); // conferenceId -> slideIndex
 
@@ -92,7 +92,7 @@ async function pushQuestionLiveInternal(io, conferenceId, questionId, duration) 
 
         // Initialize poll statistics (votes hash with all options set to 0)
         // This ensures all options are tracked even if no votes are cast
-        const redis = require('../config/redisConnection').getRedis();
+        const redis = require('../core/infra/cache').getClient();
         if (redis) {
             const pollVotesKey = `conference:${conferenceId}:question:${questionId}:votes`;
             const initialVotes = {};
@@ -1018,7 +1018,7 @@ const initConferenceHandlers = (io) => {
                     });
                 }
 
-                const redis = require('../config/redisConnection').getRedis();
+                const redis = require('../core/infra/cache').getClient();
                 const lockKey = `conference:${conferenceId}:lock:slide_change`;
 
                 if (redis) {
