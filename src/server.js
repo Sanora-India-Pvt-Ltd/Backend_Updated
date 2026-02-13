@@ -1568,6 +1568,7 @@ const { startMCQGenerationWorker } = require('./workers/mcqGenerationWorker');
         
         // Start server
         httpServer.listen(PORT, () => {
+    require('./core/infra/runtimeMonitor').startRuntimeMonitor();
     console.log(`\n🎯 Server running on port ${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📊 Database: sanora`);

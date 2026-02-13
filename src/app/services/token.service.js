@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../../models/authorization/User');
-const { generateAccessToken, generateRefreshToken } = require('../../middleware/auth');
+const { generateAccessToken, generateRefreshToken } = require('../../core/auth/token');
 const AppError = require('../../core/errors/AppError');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';

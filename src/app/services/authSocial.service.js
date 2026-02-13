@@ -5,7 +5,7 @@
 
 const User = require('../../models/authorization/User');
 const { OAuth2Client } = require('google-auth-library');
-const { generateAccessToken, generateRefreshToken } = require('../../middleware/auth');
+const { generateAccessToken, generateRefreshToken } = require('../../core/auth/token');
 
 const MAX_DEVICES = 5;
 

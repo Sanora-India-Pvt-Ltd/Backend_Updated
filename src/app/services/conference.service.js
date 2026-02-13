@@ -10,7 +10,7 @@ const GroupJoinRequest = require('../../models/GroupJoinRequest');
 const Media = require('../../models/Media');
 const User = require('../../models/authorization/User');
 const AppError = require('../../core/errors/AppError');
-const { getUserConferenceRole, ROLES } = require('../../middleware/conferenceRoles');
+const { getUserConferenceRole, ROLES } = require('../../core/auth/conferenceRoles');
 const { generateQRCode } = require('../../core/infra/qr');
 
 const HOST_OWNER_SELECT =

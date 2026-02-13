@@ -6,8 +6,7 @@
 
 const Host = require('../../models/conference/Host');
 const Speaker = require('../../models/conference/Speaker');
-const hostAuth = require('../../middleware/hostAuth');
-const speakerAuth = require('../../middleware/speakerAuth');
+const { generateAccessToken, generateRefreshToken } = require('../../core/auth/token');
 const {
   signupEntity,
   loginEntity,
@@ -23,9 +22,7 @@ function getModel(entityType) {
 }
 
 function getTokenGenerators(entityType) {
-  return entityType === 'host'
-    ? { generateAccessToken: hostAuth.generateAccessToken, generateRefreshToken: hostAuth.generateRefreshToken }
-    : { generateAccessToken: speakerAuth.generateAccessToken, generateRefreshToken: speakerAuth.generateRefreshToken };
+  return { generateAccessToken, generateRefreshToken };
 }
 
 async function signup(body, entityType, userAgent) {
