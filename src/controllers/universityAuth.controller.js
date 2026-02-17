@@ -7,7 +7,20 @@ const signupUniversity = async (req, res) => {
   return res.status(result.statusCode).json(result.json);
 };
 
+const loginUniversity = async (req, res) => {
+  const result = await universityAuthService.loginUniversity({
+    email: req.body.email,
+    password: req.body.password,
+    rememberMe: req.body.rememberMe,
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent'],
+    deviceFingerprint: req.body.deviceFingerprint
+  });
+  return res.status(result.statusCode).json(result.json);
+};
+
 module.exports = {
-  signupUniversity
+  signupUniversity,
+  loginUniversity
 };
 

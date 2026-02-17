@@ -4,8 +4,10 @@
  */
 
 const University = require('../../models/auth/University');
+const UniversitySession = require('../../models/auth/UniversitySession');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { generateAccessToken, generateRefreshToken } = require('../../core/auth/token');
 const emailService = require('../../core/infra/email');
 const { createOTPRecord, validateOTP } = require('../../core/infra/otp');
 const cache = require('../../core/infra/cache');
@@ -82,6 +84,96 @@ async function signupUniversity(data) {
       json: { success: false, message: 'Failed to register university' }
     };
   }
+}
+
+async function loginUniversity({
+  email,
+  password,
+  rememberMe,
+  ipAddress,
+  userAgent,
+  deviceFingerprint
+}) {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  if (!normalizedEmail || !password) {
+    return { statusCode: 401, json: { success: false, message: 'Invalid credentials' } };
+  }
+
+  const university = await University.findOne({ 'account.email': normalizedEmail });
+  if (!university) {
+    return { statusCode: 401, json: { success: false, message: 'Invalid credentials' } };
+  }
+
+  const status = university.account?.status || {};
+  const isActive = status.isActive !== false;
+  const isLocked = status.isLocked === true;
+  const isApproved = status.isApproved === true;
+
+  if (!isActive || isLocked || !isApproved) {
+    return {
+      statusCode: 403,
+      json: {
+        success: false,
+        message: !isApproved
+          ? 'Account is pending approval.'
+          : isLocked
+            ? 'Account is locked due to too many failed attempts.'
+            : 'Account is inactive.'
+      }
+    };
+  }
+
+  const passwordValid = await bcrypt.compare(password, university.account.password);
+  if (!passwordValid) {
+    const loginAttempts = (university.account.loginAttempts || 0) + 1;
+    university.account.loginAttempts = loginAttempts;
+    if (loginAttempts >= 5) {
+      if (!university.account.status) university.account.status = {};
+      university.account.status.isLocked = true;
+    }
+    await university.save();
+    return { statusCode: 401, json: { success: false, message: 'Invalid credentials' } };
+  }
+
+  university.account.loginAttempts = 0;
+  university.account.lastLogin = new Date();
+  await university.save();
+
+  const accessToken = generateAccessToken({ id: university._id, role: 'UNIVERSITY' });
+  const { token: refreshToken, expiryDate } = generateRefreshToken();
+
+  const sessionMs = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const expiresAt = new Date(Date.now() + sessionMs);
+
+  await UniversitySession.create({
+    universityId: university._id,
+    token: accessToken,
+    refreshToken,
+    ipAddress: ipAddress || undefined,
+    deviceFingerprint: deviceFingerprint || undefined,
+    userAgent: userAgent || undefined,
+    expiresAt,
+    lastActivity: new Date()
+  });
+
+  return {
+    statusCode: 200,
+    json: {
+      success: true,
+      message: 'Login successful',
+      data: {
+        token: accessToken,
+        refreshToken,
+        university: {
+          id: university._id,
+          email: university.account.email,
+          name: university.name,
+          isApproved: university.account.status.isApproved
+        },
+        sessionExpiry: expiresAt
+      }
+    }
+  };
 }
 
 async function sendOTPForRegistration(body) {
@@ -416,6 +508,7 @@ async function verifyEmail(tokenParam) {
 
 module.exports = {
   signupUniversity,
+  loginUniversity,
   sendOTPForRegistration,
   verifyOTPForRegistration,
   register,
