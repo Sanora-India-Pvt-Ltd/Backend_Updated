@@ -1038,6 +1038,17 @@ try {
     console.error('Stack:', error.stack);
 }
 
+// University account routes (clean architecture)
+try {
+    console.log('🔄 Loading university account routes...');
+    const universityAuthRoutes = require('./routes/universityAuth.routes');
+    app.use('/api/university', universityAuthRoutes);
+    console.log('✅ University account routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading university account routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
 // University Course Analytics routes
 try {
     console.log('🔄 Loading university course routes...');

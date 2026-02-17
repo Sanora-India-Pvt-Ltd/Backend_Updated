@@ -10,6 +10,80 @@ const emailService = require('../../core/infra/email');
 const { createOTPRecord, validateOTP } = require('../../core/infra/otp');
 const cache = require('../../core/infra/cache');
 
+function generateUniversityCode() {
+  const n = Math.floor(100000 + Math.random() * 900000);
+  return `UNI-${n}`;
+}
+
+async function signupUniversity(data) {
+  try {
+    const email = (data?.email || '').trim().toLowerCase();
+    const password = data?.password;
+    const name = data?.name;
+    const contactPhone = data?.contact?.phone;
+    const contactAddress = data?.contact?.address;
+
+    const existing = await University.findOne({ 'account.email': email });
+    if (existing) {
+      return {
+        statusCode: 409,
+        json: { success: false, message: 'Email already registered' }
+      };
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    let universityCode = (data?.universityCode || '').trim();
+    if (!universityCode) {
+      // Best-effort unique code generation (collision-safe via unique index)
+      for (let i = 0; i < 5; i += 1) {
+        const candidate = generateUniversityCode();
+        // eslint-disable-next-line no-await-in-loop
+        const exists = await University.findOne({ universityCode: candidate }).select('_id').lean();
+        if (!exists) {
+          universityCode = candidate;
+          break;
+        }
+      }
+      if (!universityCode) {
+        universityCode = generateUniversityCode();
+      }
+    }
+
+    const university = await University.create({
+      name,
+      universityCode,
+      contact: {
+        phone: contactPhone,
+        address: contactAddress
+      },
+      account: {
+        email,
+        password: hashedPassword
+      }
+    });
+
+    return {
+      statusCode: 201,
+      json: {
+        success: true,
+        message: 'University registered successfully. Awaiting admin approval.',
+        data: {
+          id: university._id,
+          universityCode: university.universityCode,
+          email: university.account.email,
+          isApproved: university.account.status.isApproved
+        }
+      }
+    };
+  } catch (err) {
+    return {
+      statusCode: 500,
+      json: { success: false, message: 'Failed to register university' }
+    };
+  }
+}
+
 async function sendOTPForRegistration(body) {
   const email = (body?.email || '').trim().toLowerCase();
   if (!email) {
@@ -341,6 +415,7 @@ async function verifyEmail(tokenParam) {
 }
 
 module.exports = {
+  signupUniversity,
   sendOTPForRegistration,
   verifyOTPForRegistration,
   register,
