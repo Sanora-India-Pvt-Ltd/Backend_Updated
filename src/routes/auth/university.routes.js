@@ -3,8 +3,6 @@ const router = express.Router();
 const {
     sendOTPForRegistration,
     verifyOTPForRegistration,
-    register,
-    login,
     logout,
     refreshToken,
     resendVerificationOTP,
@@ -12,11 +10,9 @@ const {
     verifyEmail
 } = require('../../controllers/auth/universityAuth.controller');
 
-// University Auth Routes
+// University Auth Routes (legacy login/register removed; use POST /api/university/signup and POST /api/university/login)
 router.post('/send-otp', sendOTPForRegistration);
 router.post('/verify-otp', verifyOTPForRegistration);
-router.post('/register', register);
-router.post('/login', login);
 router.post('/refresh', refreshToken);
 router.post('/logout', logout);
 router.post('/resend-verification-otp', resendVerificationOTP);

@@ -139,7 +139,11 @@ async function loginUniversity({
   university.account.lastLogin = new Date();
   await university.save();
 
-  const accessToken = generateAccessToken({ id: university._id, role: 'UNIVERSITY' });
+  const accessToken = generateAccessToken({
+    id: university._id,
+    type: 'university',
+    role: 'UNIVERSITY'
+  });
   const { token: refreshToken, expiryDate } = generateRefreshToken();
 
   const sessionMs = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;

@@ -53,22 +53,24 @@ const protectUniversity = async (req, res, next) => {
                 });
             }
 
-            // Check if active (support both old flat structure and new nested structure)
-            const isActive = university.account?.status?.isActive ?? university.isActive;
-            if (!isActive) {
+            // Validate account.status (new schema only)
+            const status = university.account?.status;
+            if (!status?.isActive) {
                 return res.status(403).json({
                     success: false,
-                    message: 'University account is inactive'
+                    message: 'Account inactive'
                 });
             }
-
-            // Check if verified (support both old flat structure and new nested structure)
-            const isVerified = university.verification?.isVerified ?? university.isVerified;
-            if (!isVerified) {
+            if (!status?.isApproved) {
                 return res.status(403).json({
                     success: false,
-                    message: 'Email verification required. Please verify your email address before accessing this resource.',
-                    requiresVerification: true
+                    message: 'Account not approved'
+                });
+            }
+            if (status?.isLocked) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Account locked'
                 });
             }
 
