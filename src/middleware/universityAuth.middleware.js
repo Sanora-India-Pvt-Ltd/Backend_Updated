@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const University = require('../models/auth/University');
+const UniversitySession = require('../models/auth/UniversitySession');
 const { getClient: getRedis } = require('../core/infra/cache');
 
 /**
@@ -43,6 +44,31 @@ const protectUniversity = async (req, res, next) => {
                     message: 'Invalid token type. University token required.'
                 });
             }
+
+            const session = await UniversitySession.findOne({ token });
+            if (!session) {
+                return res.status(401).json({
+                    success: false,
+                    code: 'SESSION_NOT_FOUND',
+                    message: 'Session not found. Please login again.'
+                });
+            }
+            if (session.isActive === false) {
+                return res.status(401).json({
+                    success: false,
+                    code: 'SESSION_INACTIVE',
+                    message: 'Session is inactive. Please login again.'
+                });
+            }
+            if (session.expiresAt < new Date()) {
+                return res.status(401).json({
+                    success: false,
+                    code: 'SESSION_EXPIRED',
+                    message: 'Session expired. Please login again.'
+                });
+            }
+            session.lastActivity = new Date();
+            await session.save();
 
             const university = await University.findById(decoded.id).select('-password');
 

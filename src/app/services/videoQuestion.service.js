@@ -205,7 +205,7 @@ async function publishVideoQuestion(questionId, universityId) {
             try {
                 const enrollments = await CourseEnrollment.find({
                     courseId: course._id,
-                    status: { $in: ['APPROVED', 'IN_PROGRESS', 'COMPLETED'] }
+                    status: { $in: ['enrolled', 'in_progress', 'completed'] }
                 }).select('userId').lean();
                 const notificationPromises = enrollments.map(enrollment =>
                     emitNotification({

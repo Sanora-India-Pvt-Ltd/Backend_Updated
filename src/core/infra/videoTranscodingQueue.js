@@ -153,7 +153,7 @@ class VideoTranscodingQueue extends EventEmitter {
             if (video && video.courseId) {
               const enrollments = await CourseEnrollment.find({
                 courseId: video.courseId,
-                status: { $in: ['APPROVED', 'IN_PROGRESS', 'COMPLETED'] }
+                status: { $in: ['enrolled', 'in_progress', 'completed'] }
               })
                 .select('userId')
                 .lean();

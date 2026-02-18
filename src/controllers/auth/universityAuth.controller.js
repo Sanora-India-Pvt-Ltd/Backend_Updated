@@ -67,7 +67,12 @@ const logout = async (req, res) => {
 
 const refreshToken = async (req, res) => {
   try {
-    const result = await universityAuthService.refreshToken(req.body);
+    const result = await universityAuthService.refreshUniversityToken({
+      refreshToken: req.body.refreshToken,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      deviceFingerprint: req.body.deviceFingerprint
+    });
     return res.status(result.statusCode).json(result.json);
   } catch (error) {
     return res.status(500).json({

@@ -37,6 +37,7 @@ const universitySessionSchema = new mongoose.Schema({
 });
 
 universitySessionSchema.index({ universityId: 1 });
+universitySessionSchema.index({ refreshToken: 1 }, { unique: true });
 universitySessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model('UniversitySession', universitySessionSchema);

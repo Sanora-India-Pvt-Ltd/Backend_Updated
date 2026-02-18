@@ -28,7 +28,7 @@ async function createCourse(body, universityId) {
             maxCompletions: body.maxCompletions ?? null,
             completionDeadline: body.completionDeadline ?? null,
             rewardTokensPerCompletion: body.rewardTokensPerCompletion ?? 0,
-            status: 'DRAFT'
+            status: 'draft'
         });
         return { statusCode: 201, json: { success: true, message: 'Course created successfully', data: { course } } };
     } catch (error) {
@@ -41,7 +41,7 @@ async function getCourses(universityId) {
     try {
         const query = universityId
             ? { universityId }
-            : { status: { $in: ['LIVE', 'FULL'] } };
+            : { status: { $in: ['active', 'down'] } };
         const courses = await Course.find(query).select('-__v').sort({ createdAt: -1 }).lean();
         return { statusCode: 200, json: { success: true, message: 'Courses retrieved successfully', data: { courses } } };
     } catch (error) {
@@ -82,7 +82,7 @@ async function getCourseById(id, universityId, userId, userObj) {
                 .lean();
         } else if (userObj && userObj._id) {
             enrollment = await CourseEnrollment.findOne({ userId: userObj._id, courseId: course._id }).lean();
-            if (enrollment && ['APPROVED', 'IN_PROGRESS', 'COMPLETED'].includes(enrollment.status)) {
+            if (enrollment && ['enrolled', 'in_progress', 'completed'].includes(enrollment.status)) {
                 videos = await Video.find({ courseId: course._id, status: 'READY' })
                     .select('_id title videoUrl status attachedProductId')
                     .lean();
@@ -198,7 +198,7 @@ async function requestEnrollment(courseId, userId) {
         if (!course) {
             return { statusCode: 404, json: { success: false, message: 'Course not found' } };
         }
-        if (course.status !== 'LIVE') {
+        if (course.status !== 'active') {
             return { statusCode: 400, json: { success: false, message: `Course is not available for enrollment. Current status: ${course.status}` } };
         }
         const existingEnrollment = await CourseEnrollment.findOne({ userId, courseId });
@@ -207,7 +207,7 @@ async function requestEnrollment(courseId, userId) {
         }
         const isInviteOnly = course.isInviteOnly !== undefined ? course.isInviteOnly : course.inviteOnly;
         if (isInviteOnly) {
-            const enrollment = await CourseEnrollment.create({ userId, courseId, status: 'REQUESTED' });
+            const enrollment = await CourseEnrollment.create({ userId, courseId, status: 'invited' });
             try {
                 await emitNotification({
                     recipientType: 'UNIVERSITY',
@@ -228,16 +228,16 @@ async function requestEnrollment(courseId, userId) {
         if (course.maxCompletions != null) {
             const activeEnrollmentCount = await CourseEnrollment.countDocuments({
                 courseId,
-                status: { $in: ['APPROVED', 'IN_PROGRESS', 'COMPLETED'] }
+                status: { $in: ['enrolled', 'in_progress', 'completed'] }
             });
             if (activeEnrollmentCount >= course.maxCompletions) {
-                if (course.status !== 'FULL') {
-                    await Course.findByIdAndUpdate(courseId, { status: 'FULL' });
+                if (course.status !== 'down') {
+                    await Course.findByIdAndUpdate(courseId, { status: 'down' });
                 }
                 return { statusCode: 400, json: { success: false, message: 'Course enrollment limit reached. This course is now full.', data: { maxCompletions: course.maxCompletions, currentEnrollments: activeEnrollmentCount } } };
             }
         }
-        const enrollmentData = { userId, courseId, status: 'APPROVED', approvedAt: new Date() };
+        const enrollmentData = { userId, courseId, status: 'enrolled', approvedAt: new Date() };
         if (course.completionDeadline) enrollmentData.expiresAt = course.completionDeadline;
         const enrollment = await CourseEnrollment.create(enrollmentData);
         return { statusCode: 201, json: { success: true, message: 'Enrollment approved automatically', data: { enrollment } } };
@@ -285,11 +285,11 @@ async function approveEnrollment(courseId, enrollmentId, universityId) {
             return { statusCode: 404, json: { success: false, message: 'Enrollment not found' } };
         }
         if (course.maxCompletions != null && course.completedCount >= course.maxCompletions) {
-            course.status = 'FULL';
+            course.status = 'down';
             await course.save();
-            return { statusCode: 400, json: { success: false, message: 'Course enrollment limit reached', data: { maxCompletions: course.maxCompletions, completedCount: course.completedCount, courseStatus: 'FULL' } } };
+            return { statusCode: 400, json: { success: false, message: 'Course enrollment limit reached', data: { maxCompletions: course.maxCompletions, completedCount: course.completedCount, courseStatus: 'down' } } };
         }
-        enrollment.status = 'APPROVED';
+        enrollment.status = 'enrolled';
         enrollment.approvedAt = new Date();
         if (course.completionDeadline) enrollment.expiresAt = course.completionDeadline;
         await enrollment.save();
@@ -337,7 +337,7 @@ async function rejectEnrollment(courseId, enrollmentId, universityId) {
         if (!enrollment) {
             return { statusCode: 404, json: { success: false, message: 'Enrollment not found' } };
         }
-        enrollment.status = 'REJECTED';
+        enrollment.status = 'dropped';
         await enrollment.save();
         try {
             const client = cache.getClient();
@@ -398,14 +398,14 @@ async function getCourseAnalytics(courseId, universityId) {
             };
         });
         const analytics = {
-            course: { title: course.name, maxCompletions: course.maxCompletions || null, completedCount: course.completedCount || 0, status: course.status || 'DRAFT' },
+            course: { title: course.name, maxCompletions: course.maxCompletions || null, completedCount: course.completedCount || 0, status: course.status || 'draft' },
             enrollments: {
-                totalRequested: enrollmentMap['REQUESTED'] || 0,
-                totalApproved: enrollmentMap['APPROVED'] || 0,
-                totalCompleted: enrollmentMap['COMPLETED'] || 0,
-                totalExpired: enrollmentMap['EXPIRED'] || 0,
-                totalRejected: enrollmentMap['REJECTED'] || 0,
-                totalInProgress: enrollmentMap['IN_PROGRESS'] || 0
+                totalRequested: enrollmentMap['invited'] || 0,
+                totalApproved: enrollmentMap['enrolled'] || 0,
+                totalCompleted: enrollmentMap['completed'] || 0,
+                totalExpired: 0,
+                totalRejected: enrollmentMap['dropped'] || 0,
+                totalInProgress: enrollmentMap['in_progress'] || 0
             },
             tokens: { totalTokensIssued },
             videos: videoAnalytics
@@ -435,8 +435,8 @@ async function publishCourse(courseId, universityId) {
         if (course.universityId.toString() !== universityId.toString()) {
             return { statusCode: 403, json: { success: false, message: 'You do not have permission to publish this course' } };
         }
-        if (course.status !== 'DRAFT') {
-            return { statusCode: 400, json: { success: false, message: `Course cannot be published. Current status: ${course.status}. Only DRAFT courses can be published.` } };
+        if (course.status !== 'draft') {
+            return { statusCode: 400, json: { success: false, message: `Course cannot be published. Current status: ${course.status}. Only draft courses can be published.` } };
         }
         const videoCount = await Video.countDocuments({ courseId: course._id });
         if (videoCount === 0) {
@@ -445,7 +445,7 @@ async function publishCourse(courseId, universityId) {
         if (course.maxCompletions != null && course.maxCompletions <= 0) {
             return { statusCode: 400, json: { success: false, message: 'maxCompletions must be greater than 0 if set' } };
         }
-        course.status = 'LIVE';
+        course.status = 'active';
         course.publishedAt = new Date();
         await course.save();
         try {

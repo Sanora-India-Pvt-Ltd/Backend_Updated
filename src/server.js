@@ -1049,6 +1049,17 @@ try {
     console.error('Stack:', error.stack);
 }
 
+// University dashboard routes (protectUniversity)
+try {
+    console.log('🔄 Loading university dashboard routes...');
+    const universityDashboardRoutes = require('./routes/universityDashboard.routes');
+    app.use('/api/university', universityDashboardRoutes);
+    console.log('✅ University dashboard routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading university dashboard routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
 // University Course Analytics routes
 try {
     console.log('🔄 Loading university course routes...');

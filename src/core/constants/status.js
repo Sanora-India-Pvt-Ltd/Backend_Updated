@@ -19,20 +19,19 @@ const CONFERENCE_QUESTION_STATUS = {
 
 // Course (Course.js)
 const COURSE_STATUS = {
-    DRAFT: 'DRAFT',
-    LIVE: 'LIVE',
-    FULL: 'FULL',
-    COMPLETED: 'COMPLETED'
+    DRAFT: 'draft',
+    UNDER_REVIEW: 'under_review',
+    ACTIVE: 'active',
+    DOWN: 'down'
 };
 
 // Course enrollment (CourseEnrollment.js)
 const ENROLLMENT_STATUS = {
-    REQUESTED: 'REQUESTED',
-    APPROVED: 'APPROVED',
-    REJECTED: 'REJECTED',
-    IN_PROGRESS: 'IN_PROGRESS',
-    COMPLETED: 'COMPLETED',
-    EXPIRED: 'EXPIRED'
+    INVITED: 'invited',
+    ENROLLED: 'enrolled',
+    IN_PROGRESS: 'in_progress',
+    COMPLETED: 'completed',
+    DROPPED: 'dropped'
 };
 
 // Video question (VideoQuestion.js)

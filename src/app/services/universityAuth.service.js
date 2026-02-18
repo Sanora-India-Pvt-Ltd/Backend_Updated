@@ -202,6 +202,98 @@ async function loginUniversity({
   };
 }
 
+async function refreshUniversityToken({
+  refreshToken: refreshTokenValue,
+  ipAddress,
+  userAgent,
+  deviceFingerprint
+}) {
+  if (!refreshTokenValue) {
+    return {
+      statusCode: 400,
+      json: {
+        success: false,
+        code: 'REFRESH_TOKEN_REQUIRED',
+        message: 'Refresh token is required'
+      }
+    };
+  }
+
+  const session = await UniversitySession.findOne({ refreshToken: refreshTokenValue });
+  if (!session) {
+    return {
+      statusCode: 401,
+      json: {
+        success: false,
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Invalid refresh token'
+      }
+    };
+  }
+
+  if (!session.isActive || new Date() >= session.expiresAt) {
+    return {
+      statusCode: 401,
+      json: {
+        success: false,
+        code: 'SESSION_EXPIRED',
+        message: 'Session expired. Please login again'
+      }
+    };
+  }
+
+  const university = await University.findById(session.universityId);
+  if (!university) {
+    return {
+      statusCode: 401,
+      json: {
+        success: false,
+        code: 'UNIVERSITY_NOT_ACTIVE',
+        message: 'University not found or inactive'
+      }
+    };
+  }
+  const status = university.account?.status || {};
+  if (!status.isActive || status.isLocked || !status.isApproved) {
+    return {
+      statusCode: 401,
+      json: {
+        success: false,
+        code: 'UNIVERSITY_NOT_ACTIVE',
+        message: 'University not found or inactive'
+      }
+    };
+  }
+
+  const newAccessToken = generateAccessToken({
+    id: university._id,
+    type: 'university',
+    role: 'UNIVERSITY'
+  });
+  const { token: newRefreshToken, expiryDate } = generateRefreshToken();
+
+  session.refreshToken = newRefreshToken;
+  session.expiresAt = expiryDate;
+  session.lastActivity = new Date();
+  if (ipAddress !== undefined) session.ipAddress = ipAddress;
+  if (deviceFingerprint !== undefined) session.deviceFingerprint = deviceFingerprint;
+  if (userAgent !== undefined) session.userAgent = userAgent;
+  await session.save();
+
+  return {
+    statusCode: 200,
+    json: {
+      success: true,
+      message: 'Token refreshed successfully',
+      data: {
+        token: newAccessToken,
+        refreshToken: newRefreshToken,
+        sessionExpiry: expiryDate
+      }
+    }
+  };
+}
+
 async function sendOTPForRegistration(body) {
   const email = (body?.email || '').trim().toLowerCase();
   if (!email) {
@@ -400,9 +492,14 @@ async function login(body) {
 }
 
 async function logout(authHeader) {
-  const token = authHeader?.replace('Bearer ', '');
+  const token = authHeader?.replace(/^\s*Bearer\s+/i, '').trim();
   if (token) {
     try {
+      const session = await UniversitySession.findOne({ token });
+      if (session) {
+        session.isActive = false;
+        await session.save();
+      }
       const redis = cache.getRedis ? cache.getRedis() : (cache.getClient && cache.getClient());
       if (redis && typeof redis.setex === 'function') {
         await redis.setex(`blacklist:university:${token}`, 7 * 24 * 60 * 60, '1');
@@ -535,6 +632,7 @@ async function verifyEmail(tokenParam) {
 module.exports = {
   signupUniversity,
   loginUniversity,
+  refreshUniversityToken,
   sendOTPForRegistration,
   verifyOTPForRegistration,
   register,

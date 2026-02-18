@@ -130,11 +130,11 @@ const markEnrollmentInProgress = async (userId, courseId) => {
         const enrollment = await CourseEnrollment.findOne({
             userId,
             courseId,
-            status: 'APPROVED'
+            status: 'enrolled'
         });
 
         if (enrollment) {
-            enrollment.status = 'IN_PROGRESS';
+            enrollment.status = 'in_progress';
             await enrollment.save();
         }
     } catch (error) {
@@ -156,20 +156,20 @@ const handleCourseCompletion = async (userId, courseId) => {
             return;
         }
 
-        if (enrollment.status === 'COMPLETED') {
+        if (enrollment.status === 'completed') {
             return;
         }
 
         const now = new Date();
         if (enrollment.expiresAt && now > enrollment.expiresAt) {
-            if (enrollment.status === 'APPROVED' || enrollment.status === 'IN_PROGRESS') {
-                enrollment.status = 'EXPIRED';
+            if (enrollment.status === 'enrolled' || enrollment.status === 'in_progress') {
+                enrollment.status = 'dropped';
                 await enrollment.save();
             }
             return;
         }
 
-        enrollment.status = 'COMPLETED';
+        enrollment.status = 'completed';
         enrollment.completedAt = now;
         await enrollment.save();
 
@@ -209,7 +209,7 @@ const handleCourseCompletion = async (userId, courseId) => {
             if (updatedCourse.maxCompletions !== null &&
                 updatedCourse.maxCompletions !== undefined &&
                 updatedCourse.completedCount >= updatedCourse.maxCompletions) {
-                updatedCourse.status = 'COMPLETED';
+                updatedCourse.status = 'down';
                 await updatedCourse.save();
             }
 
@@ -286,7 +286,7 @@ const checkExpiredEnrollments = async (courseId = null) => {
     try {
         const now = new Date();
         const query = {
-            status: { $in: ['APPROVED', 'IN_PROGRESS'] },
+            status: { $in: ['enrolled', 'in_progress'] },
             expiresAt: { $lt: now }
         };
 
@@ -297,12 +297,12 @@ const checkExpiredEnrollments = async (courseId = null) => {
         const expiredEnrollments = await CourseEnrollment.find(query);
 
         for (const enrollment of expiredEnrollments) {
-            enrollment.status = 'EXPIRED';
+            enrollment.status = 'dropped';
             await enrollment.save();
         }
 
         if (expiredEnrollments.length > 0) {
-            logger.info('Marked enrollments as EXPIRED', { count: expiredEnrollments.length });
+            logger.info('Marked enrollments as dropped', { count: expiredEnrollments.length });
         }
 
         return expiredEnrollments.length;

@@ -13,8 +13,8 @@ const courseEnrollmentSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['REQUESTED', 'APPROVED', 'REJECTED', 'IN_PROGRESS', 'COMPLETED', 'EXPIRED'],
-        default: 'REQUESTED',
+        enum: ['invited', 'enrolled', 'in_progress', 'completed', 'dropped'],
+        default: 'invited',
         required: true
     },
     approvedAt: {
@@ -45,12 +45,12 @@ courseEnrollmentSchema.index({ courseId: 1, createdAt: -1 });
 
 // Pre-save hook: Check expiry before saving
 courseEnrollmentSchema.pre('save', async function() {
-    // Only check expiry for APPROVED or IN_PROGRESS statuses
-    if ((this.status === 'APPROVED' || this.status === 'IN_PROGRESS') && this.expiresAt) {
+    // Only check expiry for enrolled or in_progress statuses
+    if ((this.status === 'enrolled' || this.status === 'in_progress') && this.expiresAt) {
         const now = new Date();
         if (now > this.expiresAt) {
             // Enrollment has expired
-            this.status = 'EXPIRED';
+            this.status = 'dropped';
         }
     }
     // No need to call next() in async pre-save hooks
