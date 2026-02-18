@@ -96,29 +96,48 @@ async function loginUniversity({
 }) {
   const normalizedEmail = (email || '').trim().toLowerCase();
   if (!normalizedEmail || !password) {
-    return { statusCode: 401, json: { success: false, message: 'Invalid credentials' } };
+    return {
+      statusCode: 401,
+      json: { success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' }
+    };
   }
 
   const university = await University.findOne({ 'account.email': normalizedEmail });
   if (!university) {
-    return { statusCode: 401, json: { success: false, message: 'Invalid credentials' } };
+    return {
+      statusCode: 401,
+      json: { success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' }
+    };
   }
 
   const status = university.account?.status || {};
-  const isActive = status.isActive !== false;
-  const isLocked = status.isLocked === true;
-  const isApproved = status.isApproved === true;
-
-  if (!isActive || isLocked || !isApproved) {
+  if (status.isLocked === true) {
+    return {
+      statusCode: 423,
+      json: {
+        success: false,
+        code: 'ACCOUNT_LOCKED',
+        message: 'Account locked due to too many failed login attempts'
+      }
+    };
+  }
+  if (status.isApproved === false) {
     return {
       statusCode: 403,
       json: {
         success: false,
-        message: !isApproved
-          ? 'Account is pending approval.'
-          : isLocked
-            ? 'Account is locked due to too many failed attempts.'
-            : 'Account is inactive.'
+        code: 'ACCOUNT_NOT_APPROVED',
+        message: 'Account is not approved yet'
+      }
+    };
+  }
+  if (status.isActive === false) {
+    return {
+      statusCode: 403,
+      json: {
+        success: false,
+        code: 'ACCOUNT_INACTIVE',
+        message: 'Account is inactive'
       }
     };
   }
@@ -132,7 +151,10 @@ async function loginUniversity({
       university.account.status.isLocked = true;
     }
     await university.save();
-    return { statusCode: 401, json: { success: false, message: 'Invalid credentials' } };
+    return {
+      statusCode: 401,
+      json: { success: false, code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' }
+    };
   }
 
   university.account.loginAttempts = 0;
