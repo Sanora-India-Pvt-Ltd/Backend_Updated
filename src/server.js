@@ -1069,7 +1069,7 @@ console.log('✅ University course creation routes loaded successfully');
 // University Course Analytics routes
 try {
     console.log('🔄 Loading university course routes...');
-    app.use('/api/university', require('./routes/university/universityCourseRoutes'));
+    app.use('/api/university', require('./routes/university/universityCourseCreation.routes'));
     app.use('/api/university', require('./routes/university/videoQuestion.routes'));
     console.log('✅ University course routes loaded successfully');
 } catch (error) {
