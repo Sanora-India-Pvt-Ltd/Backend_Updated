@@ -49,4 +49,6 @@ const createCourseSchema = Joi.object({
 
 router.post('/courses', protectUniversity, validate({ body: createCourseSchema }), createCourse);
 
+console.log('✅ universityCourseCreation.routes.js loaded');
+
 module.exports = router;
