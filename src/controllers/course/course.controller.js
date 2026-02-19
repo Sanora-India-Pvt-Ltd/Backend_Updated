@@ -50,16 +50,6 @@ const rejectEnrollment = async (req, res) => {
     res.status(result.statusCode).json(result.json);
 };
 
-const getCourseAnalytics = async (req, res) => {
-    const result = await courseService.getCourseAnalytics(req.params.courseId, req.universityId);
-    res.status(result.statusCode).json(result.json);
-};
-
-const publishCourse = async (req, res) => {
-    const result = await courseService.publishCourse(req.params.courseId, req.universityId);
-    res.status(result.statusCode).json(result.json);
-};
-
 module.exports = {
     createCourse,
     getCourses,
@@ -70,7 +60,5 @@ module.exports = {
     requestEnrollment,
     getCourseEnrollments,
     approveEnrollment,
-    rejectEnrollment,
-    getCourseAnalytics,
-    publishCourse
+    rejectEnrollment
 };

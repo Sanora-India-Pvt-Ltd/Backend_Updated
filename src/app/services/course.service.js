@@ -355,115 +355,6 @@ async function rejectEnrollment(courseId, enrollmentId, universityId) {
     }
 }
 
-async function getCourseAnalytics(courseId, universityId) {
-    const cacheKey = `course_analytics:${courseId}:${universityId}`;
-    const client = cache.getClient();
-    if (client) {
-        try {
-            const cached = await client.get(cacheKey);
-            if (cached) return JSON.parse(cached);
-        } catch (e) { /* fall through to DB */ }
-    }
-    try {
-        const course = await Course.findById(courseId).select('name maxCompletions completedCount status universityId').lean();
-        if (!course) {
-            return { statusCode: 404, json: { success: false, message: 'Course not found' } };
-        }
-        if (course.universityId.toString() !== universityId.toString()) {
-            return { statusCode: 403, json: { success: false, message: 'You do not have permission to view analytics for this course' } };
-        }
-        const [enrollmentStats, tokenStats, videos] = await Promise.all([
-            CourseEnrollment.aggregate([
-                { $match: { courseId: course._id } },
-                { $group: { _id: '$status', count: { $sum: 1 } } }
-            ]),
-            TokenTransaction.aggregate([
-                { $match: { source: 'COURSE_COMPLETION', sourceId: course._id } },
-                { $group: { _id: null, totalTokensIssued: { $sum: '$amount' } } }
-            ]),
-            Video.find({ courseId: course._id }).select('_id title productAnalytics attachedProductId').lean()
-        ]);
-        const enrollmentMap = {};
-        enrollmentStats.forEach(stat => { enrollmentMap[stat._id] = stat.count; });
-        const totalTokensIssued = tokenStats.length > 0 ? tokenStats[0].totalTokensIssued : 0;
-        const videoAnalytics = videos.map(video => {
-            const views = video.productAnalytics?.views || 0;
-            const clicks = video.productAnalytics?.clicks || 0;
-            const purchases = video.productAnalytics?.purchases || 0;
-            const conversionRate = clicks > 0 ? (purchases / clicks) * 100 : 0;
-            return {
-                videoId: video._id,
-                title: video.title,
-                productAnalytics: { views, clicks, purchases, conversionRate: Math.round(conversionRate * 100) / 100 }
-            };
-        });
-        const analytics = {
-            course: { title: course.name, maxCompletions: course.maxCompletions || null, completedCount: course.completedCount || 0, status: course.status || 'draft' },
-            enrollments: {
-                totalRequested: enrollmentMap['invited'] || 0,
-                totalApproved: enrollmentMap['enrolled'] || 0,
-                totalCompleted: enrollmentMap['completed'] || 0,
-                totalExpired: 0,
-                totalRejected: enrollmentMap['dropped'] || 0,
-                totalInProgress: enrollmentMap['in_progress'] || 0
-            },
-            tokens: { totalTokensIssued },
-            videos: videoAnalytics
-        };
-        const result = { statusCode: 200, json: { success: true, message: 'Course analytics retrieved successfully', data: { analytics } } };
-        if (client) {
-            try {
-                await client.set(cacheKey, JSON.stringify(result), 'EX', 30);
-            } catch (e) { /* ignore */ }
-        }
-        return result;
-    } catch (error) {
-        console.error('Get course analytics error:', error);
-        return { statusCode: 500, json: { success: false, message: 'Error retrieving course analytics', error: error.message } };
-    }
-}
-
-async function publishCourse(courseId, universityId) {
-    try {
-        if (!courseId) {
-            return { statusCode: 400, json: { success: false, message: 'Course ID is required' } };
-        }
-        const course = await Course.findById(courseId);
-        if (!course) {
-            return { statusCode: 404, json: { success: false, message: 'Course not found' } };
-        }
-        if (course.universityId.toString() !== universityId.toString()) {
-            return { statusCode: 403, json: { success: false, message: 'You do not have permission to publish this course' } };
-        }
-        if (course.status !== 'draft') {
-            return { statusCode: 400, json: { success: false, message: `Course cannot be published. Current status: ${course.status}. Only draft courses can be published.` } };
-        }
-        const videoCount = await Video.countDocuments({ courseId: course._id });
-        if (videoCount === 0) {
-            return { statusCode: 400, json: { success: false, message: 'Course must have at least one video before it can be published' } };
-        }
-        if (course.maxCompletions != null && course.maxCompletions <= 0) {
-            return { statusCode: 400, json: { success: false, message: 'maxCompletions must be greater than 0 if set' } };
-        }
-        course.status = 'active';
-        course.publishedAt = new Date();
-        await course.save();
-        try {
-            const client = cache.getClient();
-            if (client) {
-                let keys = await client.keys(`course:${courseId}:*`);
-                if (keys.length) await client.del(...keys);
-                keys = await client.keys(`course_analytics:${courseId}:*`);
-                if (keys.length) await client.del(...keys);
-            }
-        } catch (e) { /* fail-safe */ }
-        return { statusCode: 200, json: { success: true, message: 'Course is now live', data: { courseId: course._id.toString(), status: course.status, publishedAt: course.publishedAt } } };
-    } catch (error) {
-        console.error('Publish course error:', error);
-        return { statusCode: 500, json: { success: false, message: 'Error publishing course', error: process.env.NODE_ENV === 'development' ? error.message : undefined } };
-    }
-}
-
 module.exports = {
     createCourse,
     getCourses,
@@ -474,7 +365,5 @@ module.exports = {
     requestEnrollment,
     getCourseEnrollments,
     approveEnrollment,
-    rejectEnrollment,
-    getCourseAnalytics,
-    publishCourse
+    rejectEnrollment
 };

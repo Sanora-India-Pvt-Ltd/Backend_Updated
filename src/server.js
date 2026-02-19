@@ -1061,19 +1061,25 @@ try {
 }
 
 // University course creation (single atomic save)
-console.log('🔄 Loading university course creation routes...');
-const universityCourseCreationRoutes = require('./routes/universityCourseCreation.routes');
-app.use('/api/university', universityCourseCreationRoutes);
-console.log('✅ University course creation routes loaded successfully');
-
-// University Course Analytics routes
 try {
-    console.log('🔄 Loading university course routes...');
-    app.use('/api/university', require('./routes/universityCourseCreation.routes'));
-    app.use('/api/university', require('./routes/university/videoQuestion.routes'));
-    console.log('✅ University course routes loaded successfully');
+    console.log('🔄 Loading university course creation routes...');
+    const courseCreationRoutes = require('./routes/universityCourseCreation.routes');
+    console.log('Type of courseCreationRoutes:', typeof courseCreationRoutes);
+    const routesToMount = courseCreationRoutes && courseCreationRoutes.default ? courseCreationRoutes.default : courseCreationRoutes;
+    app.use('/api/university', routesToMount);
+    console.log('✅ University course creation routes loaded successfully');
 } catch (error) {
-    console.error('❌ Error loading university course routes:', error.message);
+    console.error('❌ Error loading university course creation routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
+// University video question routes
+try {
+    console.log('🔄 Loading university video question routes...');
+    app.use('/api/university', require('./routes/university/videoQuestion.routes'));
+    console.log('✅ University video question routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading university video question routes:', error.message);
     console.error('Stack:', error.stack);
 }
 

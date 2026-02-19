@@ -29,7 +29,7 @@ const createCourseSchema = Joi.object({
   }).optional(),
   video: Joi.object({
     videoUrl: Joi.string().required(),
-    questions: Joi.array().items(questionItemSchema).optional()
+    questions: Joi.array().items(questionItemSchema).required()
   }).required(),
   product: Joi.object({
     description: Joi.string().required(),

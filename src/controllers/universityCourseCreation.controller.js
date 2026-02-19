@@ -1,9 +1,9 @@
 'use strict';
 
-const universityCourseCreationService = require('../app/services/universityCourseCreation.service');
+const courseCreationService = require('../app/services/courseCreation.service');
 
 async function createCourse(req, res) {
-  const result = await universityCourseCreationService.createUniversityCourse(req.universityId, req.body);
+  const result = await courseCreationService.createCourse(req.body, req.universityId);
   return res.status(result.statusCode).json(result.json);
 }
 
