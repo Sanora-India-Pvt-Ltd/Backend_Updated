@@ -6,6 +6,7 @@ const Joi = require('joi');
 const validate = require('../app/validators/validate');
 const { protectUniversity } = require('../middleware/universityAuth.middleware');
 const { createCourse } = require('../controllers/universityCourseCreation.controller');
+const { getUniversityCourse } = require('../controllers/universityCourseQuery.controller');
 
 const router = express.Router();
 
@@ -48,6 +49,7 @@ const createCourseSchema = Joi.object({
 });
 
 router.post('/courses', protectUniversity, validate({ body: createCourseSchema }), createCourse);
+router.get('/courses/:courseId', protectUniversity, getUniversityCourse);
 
 console.log('✅ universityCourseCreation.routes.js loaded');
 
