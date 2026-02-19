@@ -6,9 +6,16 @@ const courseSchema = new mongoose.Schema({
         ref: 'University',
         required: true
     },
+    courseType: {
+        type: String,
+        enum: ['subject_mastery', 'product_marketplace']
+    },
+    title: {
+        type: String,
+        trim: true
+    },
     name: {
         type: String,
-        required: true,
         trim: true
     },
     thumbnail: {
@@ -18,6 +25,18 @@ const courseSchema = new mongoose.Schema({
     description: {
         type: String,
         default: ''
+    },
+    eligibilityCriteria: {
+        spendabilityBands: [{ type: String }],
+        deliveryLocations: [{ type: String }]
+    },
+    reward: {
+        type: { type: String },
+        amount: { type: Number }
+    },
+    enrollmentCount: {
+        type: Number,
+        default: 0
     },
     inviteOnly: {
         type: Boolean,
@@ -42,7 +61,7 @@ const courseSchema = new mongoose.Schema({
     status: {
         type: String,
         enum: ['draft', 'under_review', 'active', 'down'],
-        default: 'draft'
+        default: 'under_review'
     },
     publishedAt: {
         type: Date,

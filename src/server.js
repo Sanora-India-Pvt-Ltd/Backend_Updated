@@ -1060,6 +1060,17 @@ try {
     console.error('Stack:', error.stack);
 }
 
+// University course creation (single atomic save)
+try {
+    console.log('🔄 Loading university course creation routes...');
+    const universityCourseCreationRoutes = require('./routes/universityCourseCreation.routes');
+    app.use('/api/university', universityCourseCreationRoutes);
+    console.log('✅ University course creation routes loaded successfully');
+} catch (error) {
+    console.error('❌ Error loading university course creation routes:', error.message);
+    console.error('Stack:', error.stack);
+}
+
 // University Course Analytics routes
 try {
     console.log('🔄 Loading university course routes...');
