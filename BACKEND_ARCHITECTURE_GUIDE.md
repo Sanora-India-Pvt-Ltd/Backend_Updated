@@ -160,3 +160,18 @@ Current state after refactoring:
 - **Clean layering enforced** — Route → Controller → App Service → Core/Infra → Models/DB is the rule.
 
 **Warning:** If this structure is violated—e.g. models or infra in controllers, or business logic in routes or middleware—the system becomes harder to maintain, test, and scale. New features and changes must follow this guide.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+tesyasgdauhgduagsyudgagvbasdbiahsid
